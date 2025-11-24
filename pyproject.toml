@@ -1,0 +1,12 @@
+[project]
+name = "study-abroad-matcher"
+version = "0.1.0"
+description = "Small application for finding matching courses from various universities"
+readme = "README.md"
+requires-python = ">=3.14.0"
+dependencies = [
+    "beautifulsoup4==4.14.2",
+    "orjson==3.11.4",
+    "pydantic==2.12.4",
+    "requests==2.32.5",
+]
