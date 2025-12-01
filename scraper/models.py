@@ -2,9 +2,9 @@
 This module defines the data structures (TypedDicts) used across the scraping application
 to ensure a consistent format for course information.
 """
-from typing import TypedDict
+from pydantic import BaseModel
 
-class CourseData(TypedDict):
+class CourseData(BaseModel):
     """
     This is our base output format, the 'standard' if you want
     every university should output this data
@@ -18,7 +18,7 @@ class CourseData(TypedDict):
     aims: str
     ilos: str
 
-class CourseList(TypedDict):
+class CourseList(BaseModel):
     """
     This is what should be output from the course list method.
     everything is implied to be Required[] so it does not need to be

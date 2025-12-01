@@ -4,6 +4,7 @@ from scraper.providers.base_provider import BaseProvider
 from scraper.models import CourseData
 import os, orjson, datetime
 from dataclasses import is_dataclass, asdict
+from rich.progress import Progress, MofNCompleteColumn
 
 class ScraperEngine:
     """
@@ -13,52 +14,53 @@ class ScraperEngine:
     def __init__(self, provider: BaseProvider):
         # This allows the engine to hold the *specific* provider it was given, i.e if it was given a keio provider it will hold and use a keio provider
         self.provider = provider
+        self.progress = Progress(    
+            *Progress.get_default_columns(),
+            MofNCompleteColumn()
+        )
     
-    def run(self):
+    def run(self, search_method: str, value: str) -> None:
         """
         The main method of the engine, it orchestrates the scraping process.
         1. It gets the course list from the provider.
-        2. It iterates through the course list and gets the details for each course.
+        2. It iterates through the course list and gets the detaíils for each course.
         3. It parses the details and returns the data.
         """
-        # Some providers may require a setup step, i.e getting cookies
-        if hasattr(self.provider, 'setup_provider'):
-            self.provider.setup_provider()
+        self.progress.start()
 
-        course_list = self.provider.get_course_list()
+        # Some providers may require a setup step, i.e getting cookies
+        setup_method = getattr(self.provider, 'setup_provider', None)
+        if callable(setup_method):
+            setup_method()
+        
+        if search_method == "keyword":
+            course_list = self.provider.search_by_keyword(value)
+        elif search_method == "course_identifier":
+            course_list = self.provider.search_by_identifier(value)
+
         all_courses_data : list[CourseData] = []
         course_list_length = len(course_list)
 
         print(f"Found {course_list_length} courses. Starting scrape...")
 
-        for progress, course in enumerate(course_list):
-            # ! We are currently limiting to 30 courses gathered as we work on user input/interface
-            if progress == 30:
-                break
-            print("Scraping course", progress, "Progress:", round((progress / course_list_length * 100), 2), "%")
+        getting_details = self.progress.add_task("[green]Getting course details...", total=course_list_length, start=True)
+        for course in course_list:
             course_data = self.provider.fetch_course_details(course)
             all_courses_data.append(course_data)
-        
-        # * This is just here for now until we move to a probably pydantic approach or find another better solution
-        def _to_serializable(o):
-            if hasattr(o, "dict"):
-                return o.dict()
-            if is_dataclass(o):
-                return asdict(o)
-            if hasattr(o, "__dict__"):
-                return vars(o)
-            return o
+            self.progress.update(getting_details, advance=1)
+
+        self.progress.stop()
 
         output_dir = os.path.join(os.path.dirname(__file__), "..", "data")
         os.makedirs(output_dir, exist_ok=True)
 
         uni_name = self.provider.university_name
         today = datetime.date.today().isoformat()
-        filename = f"{today}_{uni_name}_courses.json"
+        filename = f"{uni_name}_{value.replace(" ", "_")}_{today}_courses.json"
         
         output_path = os.path.join(output_dir, filename)
 
-        serializable = [_to_serializable(c) for c in all_courses_data]
+        serializable = [c.model_dump() for c in all_courses_data]
         
         with open(output_path, "wb") as fh:
             fh.write(orjson.dumps(serializable, option=orjson.OPT_INDENT_2))

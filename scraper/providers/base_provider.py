@@ -1,8 +1,8 @@
 from scraper.models import CourseData, CourseList
+from scraper.errors import NetworkError, HTTPStatusError
 from abc import ABC, abstractmethod
 import requests
 from requests.adapters import HTTPAdapter, Retry
-
 class BaseProvider(ABC):
     """
         All university's !! MUST !! follow this 'standard'
@@ -17,10 +17,9 @@ class BaseProvider(ABC):
         Ref: https://academia.stackexchange.com/questions/30636/how-to-abbreviate-the-name-of-a-university-when-there-is-no-official-abbreviatio 
         Current standard will be to use full name.with underscores in place of spaces and fully lowercase
     """
-    # TODO: Make this compatible with type annotation
-    university_name: str = None
+    university_name: str | None = None
 
-    def __init__(self):
+    def __init__(self) -> None:
         # Make sure to set up exponential backoff to prevent banging services, requests_cache does not work for some reason 
         # So we would need to do it ourselves
         # Stolen from https://substack.thewebscraping.club/p/rate-limit-scraping-exponential-backoff
@@ -36,7 +35,7 @@ class BaseProvider(ABC):
         self.session.mount("https://", adapter)
         self.session.mount("http://", adapter)
 
-    
+
     def __init_subclass__(cls, **kwargs) -> None:
         """
         This is called whenever a child class is defined and checks weither we have 
@@ -53,10 +52,44 @@ class BaseProvider(ABC):
                 f"Please set a unique string name for use within the program (e.g., university_name = 'keio_university')."
             )
 
-    @abstractmethod
-    def get_course_list(self) -> list[CourseList]:
+    def _request(self, method: str, url: str, *, timeout: float | tuple[float, float] = 15, allow_redirects: bool = True, **kwargs) -> requests.Response:
         """
-            This is a method that should return a CourseList object,
+        Internal helper to make HTTP requests with consistent error handling.
+        Providers should prefer using `_get` / `_post` wrappers due to their consistent error handling.
+        """
+        try:
+            response = self.session.request(method=method, url=url, timeout=timeout, allow_redirects=allow_redirects, **kwargs)
+            response.raise_for_status()
+            return response
+        except requests.exceptions.Timeout as error:
+            raise NetworkError(f"Timeout during {method.upper()} {url}") from error
+        except requests.exceptions.ConnectionError as error:
+            raise NetworkError(f"Connection error during {method.upper()} {url}") from error
+        except requests.exceptions.HTTPError as error:
+            status = getattr(error.response, "status_code", None)
+            raise HTTPStatusError(status_code=status, url=url) from error
+
+    def _get(self, url: str, *, params: dict | None = None, headers: dict | None = None, timeout: float | tuple[float, float] = 15, allow_redirects: bool = True) -> requests.Response:
+        return self._request("GET", url, params=params, headers=headers, timeout=timeout, allow_redirects=allow_redirects)
+
+    def _post(self, url: str, *, data: dict | None = None, json: dict | None = None, headers: dict | None = None, timeout: float | tuple[float, float] = 20) -> requests.Response:
+        return self._request("POST", url, data=data, json=json, headers=headers, timeout=timeout)
+        
+    @abstractmethod
+    def search_by_keyword(self, keyword: str) -> list[CourseList]:
+        """
+            This is the method to search for courses by keyword
+            that should return a CourseList object,
+            which contains the name, course code and url of the course
+            for use in the parsing and getting of data for each course
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def search_by_identifier(self, identifier: str) -> list[CourseList]:
+        """
+            This is the method to search for courses by identifier
+            that should return a CourseList object,
             which contains the name, course code and url of the course
             for use in the parsing and getting of data for each course
         """

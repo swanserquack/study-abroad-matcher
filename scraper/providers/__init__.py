@@ -6,7 +6,7 @@ from .base_provider import BaseProvider
 # This dictionary will hold the map: 'keio_university' -> KeioProvider class
 PROVIDER_REGISTRY = {}
 
-def _register_providers():
+def _register_providers() -> None:
     """
     Scans the current directory for modules, imports them,
     and looks for classes that inherit from BaseProvider.
@@ -36,5 +36,5 @@ def _register_providers():
 _register_providers()
 
 # For use in GUI/user interface later
-def get_provider_class(uni_code: str):
+def get_provider_class(uni_code: str) -> type[BaseProvider] | None:
     return PROVIDER_REGISTRY.get(uni_code)
