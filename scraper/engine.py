@@ -23,7 +23,7 @@ class ScraperEngine:
         """
         The main method of the engine, it orchestrates the scraping process.
         1. It gets the course list from the provider.
-        2. It iterates through the course list and gets the detaíils for each course.
+        2. It iterates through the course list and gets the details for each course.
         3. It parses the details and returns the data.
         """
         self.progress.start()

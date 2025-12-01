@@ -70,7 +70,7 @@ while True:
 
     ProviderClass = get_provider_class(provider_key)
     if not ProviderClass:
-        raise Exception("Provider not found")
+        raise ScraperError(f"Provider {provider_key} not found.")
 
     provider = ProviderClass()
     engine = ScraperEngine(provider)

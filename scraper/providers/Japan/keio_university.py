@@ -158,6 +158,8 @@ class KeioProvider(BaseProvider):
                         url=str(course_entry['SYLLABUS_DETAIL_URL'])
                     ))
 
+        if not course_list:
+            raise CourseNotFoundError(f"No course found for the keyword '{keyword}'.")
         return course_list
 
     def search_by_identifier(self, identifier: str) -> list[CourseList]:
