@@ -15,7 +15,7 @@ class BaseProvider(ABC):
         This is a name that is specific to this university, allows for easy identification of 
         data belonging to this university
         Ref: https://academia.stackexchange.com/questions/30636/how-to-abbreviate-the-name-of-a-university-when-there-is-no-official-abbreviatio 
-        Current standard will be to use full name.with underscores in place of spaces and fully lowercase
+        Current standard will be to use full name with underscores in place of spaces and fully lowercase
     """
     university_name: str | None = None
 
