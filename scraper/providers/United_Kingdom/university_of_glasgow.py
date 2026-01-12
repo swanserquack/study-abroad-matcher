@@ -50,14 +50,15 @@ class UniversityOfGlasgowProvider(BaseProvider):
             page += 1
             response = self._get(self.base_url + f"searchresults/?p={page}")
             soup = BeautifulSoup(response.text, 'lxml')
+            
         if not course_list:
             # We can't be specific about whether its name or code not found here since we use the same function for both
             raise CourseNotFoundError(f"No course found for '{keyword}'.")
         return course_list
 
     def search_by_identifier(self, identifier: str) -> list[CourseList]:
-        # There isn't really a specific regex pattern we can use so we use a more general one
-        pattern = re.compile(r"^[A-Za-z]{4,7}[0-9]{4}$")
+        # There isn't really a specific regex pattern we can use so we use a more general one, LAW is a course identifier so letters need to be at least 3 long
+        pattern = re.compile(r"^[A-Za-z]{3,7}[0-9]{4}$")
         if not pattern.match(identifier.strip()):
             raise ValidationError(f"The course code '{identifier}' is not valid. Enter a valid Course Code in the format 'CXXXX9999'.")
         # Just reuse the keyword search as the search function works for both name and code

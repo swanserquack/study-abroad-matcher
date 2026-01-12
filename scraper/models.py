@@ -16,6 +16,7 @@ class CourseData(BaseModel):
     course_code: str
     semester: str
     aims: str
+    # ? I don't really know how useful this field is, seems to be more of a UK specific thing but will keep for now and remove after further consideration
     ilos: str
 
 class CourseList(BaseModel):

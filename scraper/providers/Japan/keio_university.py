@@ -1,8 +1,8 @@
 from scraper.providers.base_provider import BaseProvider
 from scraper.models import CourseList, CourseData
+from scraper.errors import ValidationError, CourseNotFoundError, ParseError, ScraperError
 from bs4 import BeautifulSoup
 from bs4.builder import ParserRejectedMarkup
-from scraper.errors import ValidationError, CourseNotFoundError, ParseError, ScraperError
 import orjson
 import re
 

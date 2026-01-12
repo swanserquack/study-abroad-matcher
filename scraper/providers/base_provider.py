@@ -96,7 +96,7 @@ class BaseProvider(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def fetch_course_details(self, course: CourseList) -> CourseData:
+    def fetch_course_details(self, course_info: CourseList) -> CourseData:
         """
             This is a method that returns the data to be written out
             to the file, which is a CourseData object. This method should
