@@ -78,14 +78,17 @@ class UTokyoScraper(BaseProvider):
             raise CourseNotFoundError(f"No course found for '{keyword}'.")
         return course_list
     
-    # TODO: This identifier search works okayish, there is no other alternative so we have to use the keyword search, this is fine as the first results correspond to the course code however it just seems to lose the plot the further down you got and it just starts outputting basically random courses, I do have an idea to combat this by checking each course code against the identifier and only returning those which match but thats going to be pushed down the road which is why I have labeled this as TODO
+    # TODO: This identifier search works okayish, there is no other alternative so we have to use the keyword search, temporary fix in place which filters the results after we have stepped through all the pages, it would be better to not waste as much time paginating but this will do for now
     def search_by_identifier(self, identifier: str) -> list[CourseList]:
         # Matching spec listed here: https://www.u-tokyo.ac.jp/content/course-numbering.pdf
         pattern = re.compile(r"^[CFG][A-Z]{2}-[A-Z]{2}[1-7][A-Z0-9]{3}[LSEPTZ][1-59]$") 
         if not pattern.match(identifier.strip()):
             raise ValidationError(f"The course code '{identifier}' is not valid. Enter a valid Course Code in the format 'XXX-XXXXXXXX'.")
+        # * The identifier does not need to be capitalised as it has little effect on the search results
         # Just reuse the keyword search as the search function works for both name and code
         course_list = self.search_by_keyword(identifier)
+        # Filter the results to only include those that match the identifier, we need the upper in case the user put in a lowercase code
+        course_list = [course for course in course_list if course.course_code.upper() == identifier.strip().upper()]
         return course_list
     
     def fetch_course_details(self, course_info: CourseList) -> CourseData:
