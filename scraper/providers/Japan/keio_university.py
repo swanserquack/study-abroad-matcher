@@ -87,7 +87,10 @@ class KeioProvider(BaseProvider):
         # For some reason this request has a msgType of 'error'?? Don't worry if this is present, for some reason it is set to this quite consistently throughout various requests, it'd be more worrying for it to be success at this point.
         _response = self._post(self.base_url + "search", data=major_list_payload, headers=self.headers)
         dictionary_repsonse = orjson.loads(_response.text)
-        major_list = dictionary_repsonse['changeTargetRs']['KNUMBER_KNDEPNM_ITEM']
+        major_list = dictionary_repsonse.get('changeTargetRs', {}).get('KNUMBER_KNDEPNM_ITEM', [])
+        
+        if not major_list:
+            raise ScraperError("Failed to retrieve major/department list for parsing K-Number.")
 
         for i in range(len(major_list)):
             if major_list[i]['name'][0:2] == knumber[4:6]:
@@ -165,13 +168,13 @@ class KeioProvider(BaseProvider):
             except orjson.JSONDecodeError as error:
                 raise ParseError(f"Failed to parse JSON response when searching for keyword '{keyword}'.") from error
 
-            for course_data_entry in dictionary_response['searchResultDs']:
-                for course_entry in course_data_entry['sbjtDs']:
+            for course_data_entry in dictionary_response.get('searchResultDs', []):
+                for course_entry in course_data_entry.get('sbjtDs', []):
                     course_list.append(CourseList(
                         # This is a better alterantive than 'SUBTITLE' as 'SUBTITLE' sometimes doesn't exist and most of the time contains Japanese
-                        name=str(course_entry['SBJTNM']),
-                        course_code=str(course_entry['KNUMBER']),
-                        url=str(course_entry['SYLLABUS_DETAIL_URL'])
+                        name=str(course_entry['SBJTNM']).strip(),
+                        course_code=str(course_entry['KNUMBER']).strip(),
+                        url=str(course_entry['SYLLABUS_DETAIL_URL']).strip()
                     ))
 
         if not course_list:
@@ -218,8 +221,9 @@ class KeioProvider(BaseProvider):
             except orjson.JSONDecodeError as error:
                 raise ParseError(f"Failed to parse JSON response when searching for K-Number '{identifier}'.") from error
             
-            for course_data_entry in dictionary_response['searchResultDs']:
-                for course_entry in course_data_entry['sbjtDs']:
+            for course_data_entry in dictionary_response.get('searchResultDs', []):
+                # * The API returns an empty list for sbjtDs when no results are found, but its still better to be safe
+                for course_entry in course_data_entry.get('sbjtDs', []):
                     course_list.append(CourseList(
                         # This is a better alterantive than 'SUBTITLE' as 'SUBTITLE' sometimes doesn't exist and most of the time contains Japanese
                         name=str(course_entry['SBJTNM']),
@@ -241,15 +245,15 @@ class KeioProvider(BaseProvider):
         parsed_data = self.parse_courses(response.text, course_info)
         return parsed_data
     
-    def parse_courses(self, html_content: str, course_info: CourseList) -> CourseData:
+    def parse_courses(self, raw_content: str, course_info: CourseList) -> CourseData:
         """
         Parses the html content of a course page and returns a CourseData object.
         """
         try:
-            soup = BeautifulSoup(html_content, 'lxml')
+            soup = BeautifulSoup(raw_content, 'lxml')
         # This should never happen, but just in case lxml fails for some reason
         except ParserRejectedMarkup:
-            soup = BeautifulSoup(html_content, 'html.parser')
+            soup = BeautifulSoup(raw_content, 'html.parser')
         
         semester_td = soup.select_one("th:-soup-contains('Academic Year/Semester') + td")
         semester = semester_td.get_text(strip=True) if semester_td else "N/A"

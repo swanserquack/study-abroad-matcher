@@ -96,11 +96,11 @@ class UTokyoScraper(BaseProvider):
         parsed_data = self.parse_courses(response.text, course_info)
         return parsed_data
 
-    def parse_courses(self, html_content: str, course_info: CourseList) -> CourseData:
+    def parse_courses(self, raw_content: str, course_info: CourseList) -> CourseData:
         try:
-            soup = BeautifulSoup(html_content, 'lxml')
+            soup = BeautifulSoup(raw_content, 'lxml')
         except ParserRejectedMarkup:
-            soup = BeautifulSoup(html_content, 'html.parser')
+            soup = BeautifulSoup(raw_content, 'html.parser')
 
         # * There are 5 potential semesters, S1, S2, A1, A2 and W (There are only 61 courses which use W). The website has a css class which is used just for those thing so we plan to just search and see if we have any of those
         # ? I did think about checking for text however in my opinion that would be too fragile as the actual course description *could* contain those strings. Is this much better? Maybe just a bit 

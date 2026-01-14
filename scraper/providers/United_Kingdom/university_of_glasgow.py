@@ -84,11 +84,11 @@ class UniversityOfGlasgowProvider(BaseProvider):
         parsed_data = self.parse_courses(response.text, course_info)
         return parsed_data
     
-    def parse_courses(self, html_content: str, course_info: CourseList) -> CourseData:
+    def parse_courses(self, raw_content: str, course_info: CourseList) -> CourseData:
         try:
-            soup = BeautifulSoup(html_content, 'lxml')
+            soup = BeautifulSoup(raw_content, 'lxml')
         except ParserRejectedMarkup:
-            soup = BeautifulSoup(html_content, 'html.parser')
+            soup = BeautifulSoup(raw_content, 'html.parser')
 
         # There is some corrolation between the course code and the position of these fields but not always reliable enough to use that, sticking to text
         semester_td = soup.select_one("li:-soup-contains('Typically Offered:')")

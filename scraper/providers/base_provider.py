@@ -123,7 +123,7 @@ class BaseProvider(ABC):
         raise NotImplementedError
     
     @abstractmethod
-    def parse_courses(self, html_content: str, course_info: CourseList) -> CourseData:
+    def parse_courses(self, raw_content: str, course_info: CourseList) -> CourseData:
         """
             This is a method that takes in the text response from fetch_course_details
             and parses it into a CourseData object, this exists to enforce a common format
