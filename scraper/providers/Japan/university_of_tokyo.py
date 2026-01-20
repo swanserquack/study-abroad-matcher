@@ -75,7 +75,7 @@ class UTokyoScraper(BaseProvider):
             response = self._get(self.base_url + f"result?type=jd&q={keyword}&interface_language=en&page={page}")
             soup = BeautifulSoup(response.text, 'lxml')
         if not course_list:
-            raise CourseNotFoundError(f"No course found for '{keyword}'.")
+            raise CourseNotFoundError(f"No courses found for '{keyword}'.")
         return course_list
     
     # TODO: This identifier search works okayish, there is no other alternative so we have to use the keyword search, temporary fix in place which filters the results after we have stepped through all the pages, it would be better to not waste as much time paginating but this will do for now

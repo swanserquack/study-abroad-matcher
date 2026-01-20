@@ -67,7 +67,7 @@ class UniversityOfGlasgowProvider(BaseProvider):
             
         if not course_list:
             # We can't be specific about whether its name or code not found here since we use the same function for both
-            raise CourseNotFoundError(f"No course found for '{keyword}'.")
+            raise CourseNotFoundError(f"No courses found for '{keyword}'.")
         return course_list
 
     def search_by_identifier(self, identifier: str) -> list[CourseList]:

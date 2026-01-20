@@ -18,8 +18,6 @@
 from scraper.providers.base_provider import BaseProvider
 from scraper.models import CourseList, CourseData
 from scraper.errors import ValidationError, CourseNotFoundError, ParseError, ScraperError
-from bs4 import BeautifulSoup
-from bs4.builder import ParserRejectedMarkup
 import orjson
 import re
 
@@ -84,7 +82,7 @@ class YonseiProvider(BaseProvider):
             self.korean_course_names[str(course_entry.get("subjtnb", "")).strip()] = str(course_entry.get("subjtNm2", "")).strip()
 
         if not course_list:
-            raise CourseNotFoundError(f"No course found for the keyword '{keyword}'.")
+            raise CourseNotFoundError(f"No courses found for the keyword '{keyword}'.")
         return course_list
     
     def search_by_identifier(self, identifier: str) -> list[CourseList]:
@@ -122,7 +120,10 @@ class YonseiProvider(BaseProvider):
             raise ParseError(f"Failed to parse JSON content for course '{course_info.course_code}'.") from error
         
         # Sometimes this aims will be in Korean, not much I can do about this
-        aims = dictionary_response.get("_METADATA_", {}).get("result", "N/A")
+        aims = dictionary_response.get("_METADATA_", {}).get("result", [])
+
+        if not aims:
+            raise ScraperError(f"Could not find aims for course '{course_info.course_code}'.")
 
         return CourseData(
             name=course_info.name,

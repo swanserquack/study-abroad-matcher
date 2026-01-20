@@ -178,7 +178,7 @@ class KeioProvider(BaseProvider):
                     ))
 
         if not course_list:
-            raise CourseNotFoundError(f"No course found for the keyword '{keyword}'.")
+            raise CourseNotFoundError(f"No courses found for the keyword '{keyword}'.")
         return course_list
 
     def search_by_identifier(self, identifier: str) -> list[CourseList]:
@@ -232,7 +232,7 @@ class KeioProvider(BaseProvider):
                     ))
 
         if not course_list:
-            raise CourseNotFoundError(f"No course found for the K-Number '{identifier}'.")
+            raise CourseNotFoundError(f"No courses found for the K-Number '{identifier}'.")
         
         return course_list
 
