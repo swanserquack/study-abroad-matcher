@@ -23,7 +23,7 @@ import re
 # ! The langauge selection only affects the interface so Japanese course descriptions/aims/ilos will still be in Japanese, not much I can do here (future translation feature?)
 # Their MIMA system is soooo cool 
 
-class UTokyoScraper(BaseProvider):
+class UTokyoProvider(BaseProvider):
     university_name = "university_of_tokyo"
 
     def __init__(self) -> None:
@@ -38,7 +38,10 @@ class UTokyoScraper(BaseProvider):
         page = 1
         # What does type=jd mean?
         response = self._get(self.base_url + f"result?type=jd&q={keyword}&interface_language=en")
-        soup = BeautifulSoup(response.text, 'lxml')
+        try:
+            soup = BeautifulSoup(response.text, 'lxml')
+        except ParserRejectedMarkup:
+            soup = BeautifulSoup(response.text, 'html.parser')
         while True:
             # Find all the course containers
             maincontent_div = soup.find_all('div', class_='catalog-search-result-card')

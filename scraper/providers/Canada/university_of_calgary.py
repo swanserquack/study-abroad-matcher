@@ -24,7 +24,7 @@ import re
 # * The API for Calgary (coursedog) has a ton of useful information on tap - such as dependencies, if its got a final exam etc - when I build up a proper UI later I will need to extend out a specific CourseData for Calgary to take advantage of all this extra data
 # * GOLD MINE: GET request to https://app.coursedog.com/api/v1/ucalgary_peoplesoft/general/courseTemplate/questions provides a ton of information about each field, such as a description and a ton of details about it
 # * GET request to https://app.coursedog.com/api/v1/ca/ucalgary_peoplesoft/search-configurations/3HheDcKChSNwS1Wr1Khr provides information about what filters are available and kind of what fields to use in request for filters
-class UniversityOfCalgaryProvider(BaseProvider):
+class UCalgaryProvider(BaseProvider):
     university_name = "university_of_calgary"
 
     def __init__(self) -> None:

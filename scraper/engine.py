@@ -16,7 +16,6 @@
 from scraper.providers.base_provider import BaseProvider
 from scraper.models import CourseData
 import os, orjson, datetime
-from dataclasses import is_dataclass, asdict
 from rich.progress import Progress, MofNCompleteColumn
 
 class ScraperEngine:

@@ -86,8 +86,8 @@ class BaseProvider(ABC):
     def _get(self, url: str, *, params: dict | None = None, headers: dict | None = None, timeout: float | tuple[float, float] = 15, allow_redirects: bool = True) -> requests.Response:
         return self._request("GET", url, params=params, headers=headers, timeout=timeout, allow_redirects=allow_redirects)
 
-    def _post(self, url: str, *, data: dict | None = None, json: dict | None = None, headers: dict | None = None, timeout: float | tuple[float, float] = 20) -> requests.Response:
-        return self._request("POST", url, data=data, json=json, headers=headers, timeout=timeout)
+    def _post(self, url: str, *, data: dict | None = None, json: dict | None = None, headers: dict | None = None, timeout: float | tuple[float, float] = 20, files: dict | None = None) -> requests.Response:
+        return self._request("POST", url, data=data, json=json, headers=headers, timeout=timeout, files=files)
         
     @abstractmethod
     def search_by_keyword(self, keyword: str) -> list[CourseList]:

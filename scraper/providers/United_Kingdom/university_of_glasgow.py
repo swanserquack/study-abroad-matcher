@@ -20,7 +20,7 @@ from bs4.builder import ParserRejectedMarkup
 import re
 
 # * Needs to be full name as we also have Glasgow Caledonian University
-class UniversityOfGlasgowProvider(BaseProvider):
+class UGlasgowProvider(BaseProvider):
     university_name = "university_of_glasgow"
     def __init__(self) -> None:
         """
