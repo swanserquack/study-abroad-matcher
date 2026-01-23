@@ -129,6 +129,6 @@ class YonseiProvider(BaseProvider):
             name=course_info.name,
             course_code=course_info.course_code,
             semester=course_info.url, # Stored semester in url field earlier to minimize refetching
-            aims=aims,
-            ilos=aims # * Return same info as aims
+            description=aims, # TODO: Figure out yonsei's course description system to fix this
+            aims=aims
         )

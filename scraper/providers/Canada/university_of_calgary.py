@@ -90,6 +90,6 @@ class UCalgaryProvider(BaseProvider):
             name=course_info.name,
             course_code=course_info.course_code,
             semester="N/A",
+            description=self.description_dict.get(course_info.url, "N/A"),
             aims=self.description_dict.get(course_info.url, "N/A"),
-            ilos=self.description_dict.get(course_info.url, "N/A"),
         )

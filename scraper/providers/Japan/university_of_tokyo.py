@@ -123,12 +123,13 @@ class UTokyoProvider(BaseProvider):
         aims_div = soup.find('div', class_='catalog-page-detail-lecture-aim')
         aims = aims_div.getText(strip=True) if aims_div is not None else "N/A"
 
-        # ! For this university sometimes the aims text contains something close to ilos so just input the same data into both
+        # ! For this university sometimes the aims text is basically the description of the course, nothing else fits either category well
         return CourseData(
             name=course_info.name,
             course_code=course_info.course_code,
             semester=semester,
-            aims=aims,
-            ilos=aims
+            description=aims,
+            aims=aims
+
         )
     

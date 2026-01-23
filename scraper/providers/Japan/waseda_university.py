@@ -18,6 +18,8 @@ from scraper.models import CourseList, CourseData
 from scraper.errors import ValidationError, CourseNotFoundError, ScraperError
 from bs4 import BeautifulSoup
 from bs4.builder import ParserRejectedMarkup
+from bs4 import XMLParsedAsHTMLWarning
+import warnings
 import re
 
 class WasedaProvider(BaseProvider):
@@ -110,10 +112,14 @@ class WasedaProvider(BaseProvider):
         return parsed_data
     
     def parse_courses(self, raw_content: str, course_info: CourseList) -> CourseData:
-        try:
-            soup = BeautifulSoup(raw_content, 'xml')
-        except ParserRejectedMarkup:
-            soup = BeautifulSoup(raw_content, 'html.parser')
+        # * Wasedas xhtml is very messed up, from not closing tags to tags that don't make sense, the browser fixes these but since we run requests we don't get a fixed version, be careful when parsing.
+        # * Suppress "XML parsed as HTML" warning because Waseda serves broken XHTML, xml parser crashes out so we use lxml instead to actually make the thing work.
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=XMLParsedAsHTMLWarning)
+            try:
+                soup = BeautifulSoup(raw_content, 'lxml')
+            except ParserRejectedMarkup:
+                soup = BeautifulSoup(raw_content, 'html.parser')
 
         # Find both of the tables as we use both of them for different information
         course_information_tables = soup.find_all('table', class_='ct-common ct-sirabasu')
@@ -126,14 +132,19 @@ class WasedaProvider(BaseProvider):
 
         aims = "N/A"
         # ! Fragile
-        if course_information_tables and (td := course_information_tables[1].find_all('tr')[1].find("td")):
+        if course_information_tables and (td := course_information_tables[1].find_all('tr')[2].find("td")):
             aims = td.getText(strip=True)
 
-        # TODO: When getting rid of ILO's, replace with description extraction
+        description = "N/A"
+        # * This is a case of broken xhtml, so we be careful to get it without grabbing all the text below this tag. There are two td's with wysiwyg but we grab the first
+        first_desc_td = course_information_tables[1].find('td', class_='wysiwyg') if course_information_tables else None
+        if first_desc_td:
+            description = first_desc_td.get_text(strip=True)
+
         return CourseData(
             name=course_info.name,
             course_code=course_info.course_code,
             semester=semester,
-            aims=aims,
-            ilos=aims
+            description=description,
+            aims=aims
         )

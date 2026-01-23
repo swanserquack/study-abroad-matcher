@@ -16,6 +16,6 @@
 -->
 
 # 'Study Abroad Matcher'
-This project is a simple python applicaiton that aims to help students with matching courses from their home university to courses offered at a foreign university in a single interface. Currently heavily in development with the current focus on increasing the number of universities covered and fleshing out the core functionality.
+This project is a simple python application that aims to help students with matching courses from their home university to courses offered at a foreign university in a single interface. Currently heavily in development with the current focus on increasing the number of universities covered and fleshing out the core functionality.
 
 Credit for initial idea goes to [SimonJF's study-abroad-matcher](https://github.com/SimonJF/study-abroad-matcher)

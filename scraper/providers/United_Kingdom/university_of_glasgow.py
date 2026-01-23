@@ -95,16 +95,16 @@ class UGlasgowProvider(BaseProvider):
         semester = semester_td.find(text=True, recursive=False) if semester_td is not None else "N/A"
         semester = str(semester).strip()
 
-        aims_div = soup.select_one('h3:-soup-contains("Course Aims") + div')
+        aims_div = soup.select_one('h3:-soup-contains("Intended Learning Outcomes of Course") + div')
         aims = aims_div.get_text(strip=True) if aims_div else "N/A"
 
-        ilos = soup.select_one("h3:-soup-contains('Intended Learning Outcomes of Course') + div")
-        ilo_text = ilos.get_text(strip=True) if ilos else "N/A"
+        description_div = soup.select_one("h3:-soup-contains('Short Description') + div")
+        description = description_div.get_text(strip=True) if description_div else "N/A"
         # This is good enough of an output and general enough of parsing for now
         return CourseData(
             name=course_info.name,
             course_code=course_info.course_code,
             semester=semester,
-            aims=aims,
-            ilos=ilo_text
+            description=description,
+            aims=aims
         )

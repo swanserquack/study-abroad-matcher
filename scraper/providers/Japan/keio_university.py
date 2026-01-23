@@ -258,14 +258,19 @@ class KeioProvider(BaseProvider):
         semester_td = soup.select_one("th:-soup-contains('Academic Year/Semester') + td")
         semester = semester_td.get_text(strip=True) if semester_td else "N/A"
 
-        aims_div = soup.select_one("div.syllabus-section div.contents")
+        # * For some courses (FPE-CO-03102-212-60), there are two of these, a 'Course Summary' and a 'Course Description/Objectives/Teaching Method/Intended Learning Outcome', the old code grabbed the wrong one. Additionally this code and the code at the top of the file both have different variations of the heading, so we need to check for both
+        aims_div = soup.select_one("h3:-soup-contains('Course Contents/Objectives/Teaching Method/Intended Learning Outcome') + div.contents")
+        if not aims_div:
+            aims_div = soup.select_one("h3:-soup-contains('Course Description/Objectives/Teaching Method/Intended Learning Outcome') + div.contents")
         aims = aims_div.get_text(strip=True) if aims_div else ""
         
-        # ! For this university the aims are also the ilos, just input the same data into both
+        description_td = soup.select_one("th:-soup-contains('Course Description') + td")
+        description = description_td.get_text(strip=True) if description_td else ""
+
         return CourseData(
             name=course_info.name,
             course_code=course_info.course_code,
             semester=semester,
+            description=description,
             aims=aims,
-            ilos=aims
         )
