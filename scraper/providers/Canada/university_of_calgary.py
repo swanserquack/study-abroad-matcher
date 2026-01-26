@@ -16,8 +16,11 @@
 from scraper.providers.base_provider import BaseProvider
 from scraper.models import CourseList, CourseData
 from scraper.errors import ValidationError, CourseNotFoundError, ParseError, ScraperError
+from scraper.helpers.peoplesoft import PeopleSoftCourseSearch
 from rich import print
 from rich.panel import Panel
+from rich.progress import Progress, MofNCompleteColumn
+from collections import OrderedDict
 import orjson
 import re
 
@@ -33,7 +36,7 @@ class UCalgaryProvider(BaseProvider):
         self.description_dict = {}
 
     def search_by_keyword(self, keyword: str) -> list[CourseList]:
-        print(Panel("[yellow] Note: University of Calgary does not provide semester information through their public API. Semester is marked as 'N/A' in the results.[/yellow]", title="Info"))
+        print(Panel("[yellow] Note: University of Calgary provides semester information through an alternate API. Building a course index with semester information may take a while.[/yellow]", title="Info"))
         course_list: list[CourseList] = []
         # ! There is a static payload which is sent with the request, however it like 200 lines of just sending a filter, I'd prefer not to send it (seems to work fine without it) and just do filtering on device
         # * The api is kind of documented here: https://coursedogcurriculum.docs.apiary.io/#reference/courses/search-courses
@@ -69,6 +72,20 @@ class UCalgaryProvider(BaseProvider):
             
         if not course_list:
             raise CourseNotFoundError(f"No courses found for the keyword '{keyword}'.")
+        
+        # Build the peoplesoft index for use in building the semester index below
+        self.peoplesoft_course_list = self._get_peoplesoft_courses(course_list)
+
+        # Get rid of duplicates, stolen from: https://stackoverflow.com/questions/32296933/removing-duplicates-of-a-list-of-sets 
+        self.peoplesoft_course_list = list(OrderedDict.fromkeys(self.peoplesoft_course_list).keys())
+
+        # Build semester index for later use
+        self.semester_index = {}
+        for course in self.peoplesoft_course_list:
+            course_code = course[0].strip().replace(" ", "")
+            base = re.sub(r'[AB]$', '', course_code)
+            self.semester_index.setdefault(base, []).append(course[2])
+        # print(self.peoplesoft_course_list)
         return course_list
     
     def search_by_identifier(self, identifier: str) -> list[CourseList]:
@@ -85,11 +102,64 @@ class UCalgaryProvider(BaseProvider):
         return parsed_data
     
     def parse_courses(self, raw_content: str, course_info: CourseList) -> CourseData:
-        # Their semester information is not available through their coursedog data, there is a 'semester' in their startTerm data but this just seems to relate to the semester when the course started. There is a semster search available through their public facing peoplesoft class search but I have yet to find a way to get data from this just via requests. It would require either a full browser or finding out how the specific fields are sent to the service. Hits azure???
+        # Grab the semesters from the peoplesoft index we built earlier
+        semesters = self.semester_index.get(course_info.course_code.strip(), [])
+        # If they run in multiple semesters
+        semester = " + ".join(semesters) if semesters else "Not running or N/A"
+        
         return CourseData(
             name=course_info.name,
             course_code=course_info.course_code,
-            semester="N/A",
+            semester=semester,
             description=self.description_dict.get(course_info.url, "N/A"),
             aims=self.description_dict.get(course_info.url, "N/A"),
         )
+    
+    def _get_peoplesoft_courses(self, course_info: list[CourseList]) -> list[str]:
+        # Get the course list for each course prefix we have for both semester's from peoplesoft
+        peoplesoft_parser = PeopleSoftCourseSearch("https://csprd.my.ucalgary.ca/psc/csprd/EMPLOYEE/SA/c/COMMUNITY_ACCESS.CLASS_SEARCH.GBL", "https://csprd.my.ucalgary.ca/psc/csprd/EMPLOYEE/SA/c/COMMUNITY_ACCESS.CLASS_SEARCH.GBL?public=yes/&languageCd=ENG")
+        course_prefixes_level = []
+        all_courses = []
+
+        # Figure out what search queries to run/course prefixes + levels
+        for course in course_info:
+            course_code_splitter = re.search(r"([A-Z]{3,4})([1-7][0-9]{2})$", course.course_code)
+            if course_code_splitter is None:
+                raise ScraperError(f"Failed to parse course code '{course.course_code}' for course '{course.name}'.")
+            # Dawg this if statement is my masterpiece, I think I should get an honorary degree just for this if statement...kidding. If the prefix is NOT already in the list and the first digit of the course number is NOT already in the list for THAT prefix, add it
+            if course_code_splitter.group(1) not in course_prefixes_level and course_code_splitter.group(2)[0] not in [level[1] for level in course_prefixes_level if level[0] == course_code_splitter.group(1)]:
+                course_prefixes_level.append((course_code_splitter.group(1), course_code_splitter.group(2)[0]))
+        
+        # Set up a progress bar for peoplesoft index building
+        progress = Progress(
+            *Progress.get_default_columns(),
+            MofNCompleteColumn()
+        )
+        progress.start()
+        
+        # Each prefix needs to be searched for both semesters
+        total_operations = len(course_prefixes_level) * 2
+        building_index = progress.add_task("[cyan]Building PeopleSoft index...", total=total_operations, start=True)
+        
+        # Semester mapping for display
+        semester_names = {"2257": "Fall 2025", "2261": "Winter 2026"}
+        
+        for prefix in course_prefixes_level:
+            # print("Working through prefix:", prefix)
+            # 2257 = Fall 2025, 2261 = Winter 2026
+            # Dynamic semester building next thing on my TODO list work on
+            for semester in ["2257", "2261"]:
+                # print("Working through semester:", semester)
+                semester_display = semester_names.get(semester, semester)
+                progress.update(building_index, description=f"[cyan]Building PeopleSoft index... ({prefix[0]}{prefix[1]}xx - {semester_display})")
+
+                peoplesoft_results_page = peoplesoft_parser.get_search_results(semester=semester, subject=prefix[0], course_number=int(prefix[1]))
+                parsed_courses = peoplesoft_parser.parse_results_page(peoplesoft_results_page)
+                peoplesoft_parser.new_search()
+                all_courses.extend(parsed_courses)
+
+                progress.update(building_index, advance=1)
+        
+        progress.stop()
+
+        return all_courses

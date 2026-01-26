@@ -170,3 +170,6 @@ data/
 
 # Notes
 *.txt
+
+# Folder used for testing code and scripts that help me build providers and helpers
+testing-code

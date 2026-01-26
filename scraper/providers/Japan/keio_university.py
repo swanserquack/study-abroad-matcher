@@ -58,70 +58,6 @@ class KeioProvider(BaseProvider):
         # Set the language to English
         self._post(self.base_url + "search", data=lang_payload)
 
-    # * This is imperfect, all we do is pull apart the knumber, we don't validate a course is actually associated with it, so we use error handling when requesting the course data later on
-    def _parse_knumber(self, knumber: str) -> dict[str, str]:
-        # Get the course administrator codes for the faculty/graduate school 
-        response = self._get(self.base_url + "search")
-
-        soup = BeautifulSoup(response.text, 'lxml')
-        select_tag = soup.find('select', {"name": "KNUMBER_KNFNM"})
-        if select_tag is None:
-            # If the select element isn't present, raise an error
-            raise ScraperError("Failed to find course administrator on the search page")
-        options = select_tag.find_all("option")
-
-        # 'Premature optimisation is the root of all evil' - johnhw, me turning a loop into a generator expression
-        course_admin_code = next((opt.get('value') for opt in options if opt.get('data-knfnm') == knumber[:3]), None)
-
-        # Department/Major List to cross reference their number for the actual query
-        major_list_payload = {
-            "URL_TYPE_PNM_nZ9CpQJc": "general",
-            "ACTION_ID": "SYLLABUS_SEARCH_KNUMBER_CHANGE_ITEM",
-            "CHANGE_TARGET_SRC": "KNUMBER_KNFNM",
-            "KNUMBER_TTBLYR": "2025",
-            "KNUMBER_KNFNM": course_admin_code,
-            "KNUMBER_KNDEPNM": "",
-            "KNUMBER_KNMJRCLSCD": ""
-        }
-
-        # For some reason this request has a msgType of 'error'?? Don't worry if this is present, for some reason it is set to this quite consistently throughout various requests, it'd be more worrying for it to be success at this point.
-        _response = self._post(self.base_url + "search", data=major_list_payload, headers=self.headers)
-        dictionary_repsonse = orjson.loads(_response.text)
-        major_list = dictionary_repsonse.get('changeTargetRs', {}).get('KNUMBER_KNDEPNM_ITEM', [])
-        
-        if not major_list:
-            raise ScraperError("Failed to retrieve major/department list for parsing K-Number.")
-
-        for i in range(len(major_list)):
-            if major_list[i]['name'][0:2] == knumber[4:6]:
-                department = major_list[i]['value']
-
-        # Slice out the relevant parts of the knumber, already verified against the regex
-        course_level = knumber[7]
-        major_classification = knumber[8]
-        minor_classification = knumber[9:11]
-        subject_type = knumber[11]
-        class_classification = knumber[13]
-        class_format = knumber[14]
-        language_of_instruction = knumber[15]
-        academic_fields = knumber[17:19]
-
-        parsed_knumber = {
-            "course_admin_code": course_admin_code,
-            "department": department,
-            "course_level": course_level,
-            "major_classification": major_classification,
-            "minor_classification": minor_classification,
-            "subject_type": subject_type,
-            "class_classification": class_classification,
-            "class_format": class_format,
-            "language_of_instruction": language_of_instruction,
-            "academic_fields": academic_fields
-        }
-
-        return parsed_knumber
-
-
     def search_by_keyword(self, keyword: str) -> list[CourseList]:
         course_list : list[CourseList]= []
         keyword_search_payload = {
@@ -274,3 +210,66 @@ class KeioProvider(BaseProvider):
             description=description,
             aims=aims,
         )
+    
+    # * This is imperfect, all we do is pull apart the knumber, we don't validate a course is actually associated with it, so we use error handling when requesting the course data later on
+    def _parse_knumber(self, knumber: str) -> dict[str, str]:
+        # Get the course administrator codes for the faculty/graduate school 
+        response = self._get(self.base_url + "search")
+
+        soup = BeautifulSoup(response.text, 'lxml')
+        select_tag = soup.find('select', {"name": "KNUMBER_KNFNM"})
+        if select_tag is None:
+            # If the select element isn't present, raise an error
+            raise ScraperError("Failed to find course administrator on the search page")
+        options = select_tag.find_all("option")
+
+        # 'Premature optimisation is the root of all evil' - johnhw, me turning a loop into a generator expression
+        course_admin_code = next((opt.get('value') for opt in options if opt.get('data-knfnm') == knumber[:3]), None)
+
+        # Department/Major List to cross reference their number for the actual query
+        major_list_payload = {
+            "URL_TYPE_PNM_nZ9CpQJc": "general",
+            "ACTION_ID": "SYLLABUS_SEARCH_KNUMBER_CHANGE_ITEM",
+            "CHANGE_TARGET_SRC": "KNUMBER_KNFNM",
+            "KNUMBER_TTBLYR": "2025",
+            "KNUMBER_KNFNM": course_admin_code,
+            "KNUMBER_KNDEPNM": "",
+            "KNUMBER_KNMJRCLSCD": ""
+        }
+
+        # For some reason this request has a msgType of 'error'?? Don't worry if this is present, for some reason it is set to this quite consistently throughout various requests, it'd be more worrying for it to be success at this point.
+        _response = self._post(self.base_url + "search", data=major_list_payload, headers=self.headers)
+        dictionary_repsonse = orjson.loads(_response.text)
+        major_list = dictionary_repsonse.get('changeTargetRs', {}).get('KNUMBER_KNDEPNM_ITEM', [])
+        
+        if not major_list:
+            raise ScraperError("Failed to retrieve major/department list for parsing K-Number.")
+
+        for i in range(len(major_list)):
+            if major_list[i]['name'][0:2] == knumber[4:6]:
+                department = major_list[i]['value']
+
+        # Slice out the relevant parts of the knumber, already verified against the regex
+        course_level = knumber[7]
+        major_classification = knumber[8]
+        minor_classification = knumber[9:11]
+        subject_type = knumber[11]
+        class_classification = knumber[13]
+        class_format = knumber[14]
+        language_of_instruction = knumber[15]
+        academic_fields = knumber[17:19]
+
+        parsed_knumber = {
+            "course_admin_code": course_admin_code,
+            "department": department,
+            "course_level": course_level,
+            "major_classification": major_classification,
+            "minor_classification": minor_classification,
+            "subject_type": subject_type,
+            "class_classification": class_classification,
+            "class_format": class_format,
+            "language_of_instruction": language_of_instruction,
+            "academic_fields": academic_fields
+        }
+
+        return parsed_knumber
