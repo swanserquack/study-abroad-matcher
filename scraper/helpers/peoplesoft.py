@@ -233,7 +233,8 @@ class PeopleSoftCourseSearch:
                     
                     # Pattern to match course code and title, regex knowledge slowly building...
                     # Set to match A-Z instead of specific ucalgary prefixes to allow for reusability
-                    pattern = r'([A-Z]+\s+[\d.AB]+)\s*-\s*(.+?)(?:\s*Collapsible section)?$'
+                    # Set to match A-Z from 1 for now 
+                    pattern = r'([A-Z]{1,}\s+\d+(?:\.\d+)?[AB]?)\s*-\s*([^\n]*?)(?:\s+Collapsible section)?\s*$'
                     match = re.search(pattern, text)
                     
                     if match:
