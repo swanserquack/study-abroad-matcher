@@ -236,7 +236,6 @@ class PeopleSoftCourseSearch:
                     # Set to match A-Z from 1 for now 
                     # Regex 101 shows this loops around collapsibile section text a ton, look into this???
                     pattern = r'^([A-Z]+\s+\d+(?:\.\d+)?[AB]?)\s*-\s*([^\n]*)$'
-                    print("TEXT:", text)
                     match = re.search(pattern, text)
                     
                     if match:

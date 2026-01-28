@@ -21,6 +21,8 @@ from rich import print
 from rich.panel import Panel
 from rich.progress import Progress, MofNCompleteColumn
 from collections import OrderedDict
+from pathlib import Path
+import datetime
 import orjson
 import re
 
@@ -34,6 +36,9 @@ class UCalgaryProvider(BaseProvider):
         super().__init__()
         self.search_base_url = "https://app.coursedog.com/api/v1/cm/ucalgary_peoplesoft/courses/"
         self.description_dict = {}
+        # Assume the cache to be invalid initially
+        self.cache_invalid = True
+        self.newly_cached_prefixes = []
 
     def search_by_keyword(self, keyword: str) -> list[CourseList]:
         print(Panel("[yellow] Note: University of Calgary provides semester information through an alternate API. Building a course index with semester information may take a while.[/yellow]", title="Info"))
@@ -85,6 +90,53 @@ class UCalgaryProvider(BaseProvider):
             course_code = course[0].strip().replace(" ", "")
             base = re.sub(r'[AB]$', '', course_code)
             self.semester_index.setdefault(base, []).append(course[2])
+
+        # If the cache is invalid, we want to rebuild it from scratch, this branch also triggers when the cache header doesn't exist in the file yet
+        if self.cache_invalid:
+            # Check if the path exists, if not create it
+            data_folder = Path("data/cache")
+            if not data_folder.exists():
+                data_folder.mkdir(parents=True)
+            # Open as write to wipe the file
+            with open("data/cache/ucalgary_peoplesoft_index_cache.json", "w+", encoding="utf-8") as f:
+                # Setup an inital data structure to build upon
+                new_cache: dict = {'course_prefixes_level': []}
+                # For every prefix that we had to fetch
+                for prefix in self.newly_cached_prefixes:
+                    # If the prefix isn't already in the newly built cache, add it
+                    if prefix not in new_cache['course_prefixes_level']:
+                        new_cache['course_prefixes_level'].append(prefix)
+                # Add all the courses to the cache
+                for course in self.semester_index:
+                    if course not in new_cache:
+                        new_cache[course] = self.semester_index[course]
+                # Add a one day expiration date to the cache
+                new_cache['cache_expiration'] = datetime.datetime.today() + datetime.timedelta(days=1)
+                # Decode automatically turns datetime into iso format
+                f.write(orjson.dumps(new_cache).decode("utf-8"))
+        # If the cache is not invalid, we just want to append what wasn't already in there, keep the old cache expiration date though
+        elif not self.cache_invalid:
+            # If we go down this path there is a file called ucalgary_peoplesoft_index_cache.json so we dont need to worry about there potentially not being a directory
+            with open("data/cache/ucalgary_peoplesoft_index_cache.json", "r+", encoding="utf-8") as f:
+                content = f.read()
+                if content:
+                    cache = orjson.loads(content)
+                else:
+                    cache = {'course_prefixes_level': []}
+                # Update the cache with any newly cached prefixes
+                for prefix in self.newly_cached_prefixes:
+                    if prefix not in cache['course_prefixes_level']:
+                        cache['course_prefixes_level'].append(prefix)
+                # Add any new courses to the cache
+                for course in self.semester_index:
+                    if course not in cache:
+                        cache[course] = self.semester_index[course]
+                # Move back to beginning of file and truncate
+                f.seek(0)
+                f.truncate()
+                f.write(orjson.dumps(cache).decode("utf-8"))
+
+                
         # print(self.peoplesoft_course_list)
         return course_list
     
@@ -129,6 +181,60 @@ class UCalgaryProvider(BaseProvider):
             # Dawg this if statement is my masterpiece, I think I should get an honorary degree just for this if statement...kidding. If the prefix is NOT already in the list and the first digit of the course number is NOT already in the list for THAT prefix, add it
             if course_code_splitter.group(1) not in course_prefixes_level and course_code_splitter.group(2)[0] not in [level[1] for level in course_prefixes_level if level[0] == course_code_splitter.group(1)]:
                 course_prefixes_level.append((course_code_splitter.group(1), course_code_splitter.group(2)[0]))
+
+        # Check if the file exists
+        my_file = Path("data/cache/ucalgary_peoplesoft_index_cache.json")
+        file_exists = False
+        if my_file.is_file():
+            file_exists = True
+            # Read in the cache
+            with open("data/cache/ucalgary_peoplesoft_index_cache.json", "r") as f:
+                content = f.read()
+                if content:
+                    cache = orjson.loads(content)
+                else:
+                    cache:  dict = {'course_prefixes_level': []}
+        else:
+            cache = {}
+
+        # If there is a cache expiration date, we default to assuming that the cache is invalid
+        if 'cache_expiration' in cache:
+            expiration_date = datetime.datetime.fromisoformat(cache['cache_expiration'])
+            if datetime.datetime.today() < expiration_date:
+                self.cache_invalid = False
+            else:
+                # If the cache is expired, we want to wipe it
+                cache = {}
+        
+        # How many prefixes do we need to fetch?
+        prefixes_to_fetch = []
+        for prefix in course_prefixes_level:
+            # If the file exists, the cache is valid and the prefix is already in the cache, we do not need to fetch it again so we just skip it
+            if file_exists and not self.cache_invalid and any(prefix[0] == cached_key[0] and prefix[1] == cached_key[1] for cached_key in cache['course_prefixes_level']):
+                continue
+            else:
+                # Need to fetch this prefix
+                prefixes_to_fetch.append(prefix)
+        
+        # Set the prefixes we need to fetch
+        course_prefixes_level = prefixes_to_fetch
+
+        # If we have no prefixes to fetch, we can just load everything from the cache
+        if not course_prefixes_level:
+            # For every item in the cache
+            for cached_key, semesters in cache.items():
+                # We already know self.newly_cached_prefixes is empty so we will have nothing to append so we dont need to store this, also this errors out when removing duplicates as it is a list 
+                if cached_key in ('course_prefixes_level'):
+                    continue
+                # We want to cache the full string for cache_expiration or else it will split the date
+                if cached_key in ('cache_expiration'):
+                    all_courses.append((cached_key, "", semesters))
+                    continue
+                # For every semester the course runs in, append it
+                for semester in semesters:
+                    all_courses.append((cached_key, "", semester))
+            # We can return here as we dont need to fetch anything from peoplesoft
+            return all_courses
         
         # Set up a progress bar for peoplesoft index building
         progress = Progress(
@@ -161,5 +267,5 @@ class UCalgaryProvider(BaseProvider):
                 progress.update(building_index, advance=1)
         
         progress.stop()
-
+        self.newly_cached_prefixes = course_prefixes_level
         return all_courses
