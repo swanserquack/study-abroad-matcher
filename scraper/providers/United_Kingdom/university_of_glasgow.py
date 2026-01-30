@@ -32,6 +32,7 @@ class UGlasgowProvider(BaseProvider):
     def search_by_keyword(self, keyword: str) -> list[CourseList]:
         course_list : list[CourseList]= []
         page = 1
+        # * This page/endpoint always returns the latest academic year courses, so we don't need grab what years they have available
         # d = REG code for the school the course belongs to, s = subject area, l = course level, c = course credits, wt = 'typically offered' (sem 1, sem 2, etc), HIDDEN PARAMETER v = visiting student courses (true/false) and HIDDEN PARAMETER c4l = cirriculum for life (true/false)
         response = self._get(self.base_url + f"searchresults?q={keyword}&d=&s=&l=&c=&wt=&_search=Search")
         soup = BeautifulSoup(response.text, 'lxml')

@@ -43,7 +43,7 @@ class YonseiProvider(BaseProvider):
             "_menuId": "MTA5MzM2MTI3MjkzMTI2NzYwMDA=", # Currently unknown, Constant? Doesn't seem to have any relation to cookies/session. Base64 decode just gives numbers.
             "_menuNm": "", # Currently unknown 
             "_pgmId": "NDE0MDA4NTU1NjY=", # Currently unknown, Constant? Doesn't seem to have any relation to cookies/session. Base64 decode just gives numbers.
-            "@d1#syy": "2026", # The year selected for search
+            "@d1#syy": self._get_current_year(), # The year selected for search
             "@d1#smtDivCd": "10", # The semester selected for search (10: 1st sem, 11: Summer, 20: 2nd sem, 21: Winter)
             "@d1#campsBusnsCd": "s1", # Categories (s1: Undergraduate Programs, s3: Graduate Programs, s7: Medical Center (Sinchon), s2: Undergraduate Programs (Mirae), s4: Graduate Programs (Mirae), s8: 의료원(미래) (Medical Center (?)))
             "@d1#univCd": "", # * College/Classification: This is dynamic based on previous selections so I can't really create a map for it, will need to be dynamically fetched like keio university if needed
@@ -99,7 +99,7 @@ class YonseiProvider(BaseProvider):
             "_menuId": "MTA5MzM2MTI3MjkzMTI2NzYwMDA=", # Currently unknown, Constant? Doesn't seem to have any relation to cookies/session. Base64 decode just gives numbers.
             "_menuNm": "", # Currently unknown
             "_pgmId": "NDE0MDA4NTU1NjY=", # Currently unknown, Constant? Doesn't seem to have any relation to cookies/session. Base64 decode just gives numbers.
-            "@d1#syy": "2026", # The year selected for search
+            "@d1#syy": self._get_current_year(), # The year selected for search
             "@d1#smtDivCd": "10", # The semester selected for search (10: 1st sem, 11: Summer, 20: 2nd sem, 21: Winter)
             "@d1#sysinstDivCd": "H1", # Currently unknown
             "@d1#subjtnb": course_info.course_code, # The course code we are searching the details for
@@ -132,3 +132,35 @@ class YonseiProvider(BaseProvider):
             description=aims, # TODO: Figure out yonsei's course description system to fix this
             aims=aims
         )
+    
+    def _get_current_year(self) -> str:
+        # TODO: Reuse from keyword search
+        request_headers = {
+            "_menuId": "MTA5MzM2MTI3MjkzMTI2NzYwMDA=",
+            "_menuNm": "",
+            "_pgmId": "NDE0MDA4NTU1NjY=",
+            "@d1#syy": "",
+            "@d1#smtDivCd": "",
+            "@d1#campsBusnsCd": "",
+            "@d1#univCd": "",
+            "@d1#faclyCd": "",
+            "@d1#hy": "",
+            "@d1#cdt": "%",
+            "@d1#kwdDivCd": "1",
+            "@d1#searchGbn": "",
+            "@d1#kwd": "",
+            "@d1#allKwd": "",
+            "@d1#engChg": "",
+            "@d1#prnGbn": "false",
+            "@d1#lang": "",
+            "@d1#campsDivCd": "",
+            "@d1#stuno": "",
+            "@d#": "@d1#",
+            "@d1#": "dmCond",
+            "@d1#tp": "dm",
+            "": ""
+        }
+        response = self._post(self.base_url + "sch/sles/SlessyCtr/findSlesYySmtScheList.do", data=request_headers)
+        json_response = orjson.loads(response.text)
+        year = json_response.get("dmSyySmt", {}).get("syy", "2026")
+        return year

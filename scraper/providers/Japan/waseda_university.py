@@ -34,6 +34,7 @@ class WasedaProvider(BaseProvider):
         # For the first page this is just an empty string
         page = ''
         # There are a ton of parameters, but we only need to include the ones with values (it seems), I'm not going to bother documenting the unused ones apart from the ones I already have
+        # * The year is controlled by a parameter called 'nendo', since we don't include it, it defaults to the current academic year so we don't need to worry about getting any year information
         request_body = {
             # Number of results per page
             'p_number': (None, '100'),

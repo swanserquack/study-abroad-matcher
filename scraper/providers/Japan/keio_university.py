@@ -64,7 +64,7 @@ class KeioProvider(BaseProvider):
         "URL_TYPE_PNM_nZ9CpQJc": "general",
         "ACTION_ID": "SYLLABUS_SEARCH_RESULT",
         "SUB_ACTION_ID": "SYLLABUS_SEARCH_KEYWORD_EXECUTE",
-        "KEYWORD_TTBLYR": "2025",
+        "KEYWORD_TTBLYR": self._get_current_year(),
         "KEYWORD_SMSCD": "ALL", # Semester number, 5 for Fall and 3 for Spring, ALL for both
         "KEYWORD_HALFSEMESTER": "ALL", # Whether it's the first half or second half of the semester, ALL for both
         "KEYWORD_KBS_SMSCD": "ALL",
@@ -131,7 +131,7 @@ class KeioProvider(BaseProvider):
             "URL_TYPE_PNM_nZ9CpQJc": "general",
             "ACTION_ID": "SYLLABUS_SEARCH_RESULT",
             "SUB_ACTION_ID": "SYLLABUS_SEARCH_KNUMBER_EXECUTE",
-            "KNUMBER_TTBLYR": "2025",
+            "KNUMBER_TTBLYR": self._get_current_year(),
             "KNUMBER_KNFNM": parsed_knumber["course_admin_code"],
             "KNUMBER_KNDEPNM": parsed_knumber["department"],
             "KNUMBER_KNLVLCD": parsed_knumber["course_level"],
@@ -273,3 +273,22 @@ class KeioProvider(BaseProvider):
         }
 
         return parsed_knumber
+
+    def _get_current_year(self) -> str:
+        # Grab the main page
+        response = self._get(self.base_url + "search")
+        soup = BeautifulSoup(response.text, 'lxml')
+
+        # Find the select element for academic year
+        select_tag = soup.find('select', {"name": "KEYWORD_TTBLYR"})
+        # If by some miracle it doesn't exist, just return 2025 (Pretty safe fallback as they have an option for 2010)
+        if select_tag is None:
+            return "2025"
+        
+        # Grab the selected option, this is by default the current year
+        current_year_option = select_tag.find('option', selected=True)
+        # Same as above
+        if current_year_option is None:
+            return "2025"
+        # Getting the value is better I think, we could also get the text but I just like this more
+        return str(current_year_option['value'])

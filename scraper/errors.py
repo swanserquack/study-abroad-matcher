@@ -31,6 +31,9 @@ class NetworkError(ScraperError):
     """Raised for connectivity and timeout issues when making HTTP requests."""
     pass
 
+class RobotsDisallowedError(ScraperError):
+    """Raised when a URL is disallowed by robots.txt."""
+    pass
 
 class HTTPStatusError(ScraperError):
     """Raised when an HTTP request returns an unexpected status code."""

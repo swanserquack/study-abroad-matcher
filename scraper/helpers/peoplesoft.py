@@ -235,7 +235,7 @@ class PeopleSoftCourseSearch:
                     # Set to match A-Z instead of specific ucalgary prefixes to allow for reusability
                     # Set to match A-Z from 1 for now 
                     # Regex 101 shows this loops around collapsibile section text a ton, look into this???
-                    pattern = r'^([A-Z]+\s+\d+(?:\.\d+)?[AB]?)\s*-\s*([^\n]*)$'
+                    pattern = r'^([A-Z]+\s+[0-9]+(?:\.[0-9]+)?[AB]?)\s{0,1000}-\s{0,1000}([^\n]{0,1000})$'
                     match = re.search(pattern, text)
                     
                     if match:

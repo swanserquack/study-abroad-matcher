@@ -22,6 +22,7 @@ from rich.panel import Panel
 from rich.progress import Progress, MofNCompleteColumn
 from collections import OrderedDict
 from pathlib import Path
+from bs4 import BeautifulSoup
 import datetime
 import orjson
 import re
@@ -34,11 +35,12 @@ class UCalgaryProvider(BaseProvider):
 
     def __init__(self) -> None:
         super().__init__()
-        self.search_base_url = "https://app.coursedog.com/api/v1/cm/ucalgary_peoplesoft/courses/"
+        self.base_url = "https://app.coursedog.com/api/v1/cm/ucalgary_peoplesoft/courses/"
         self.description_dict = {}
         # Assume the cache to be invalid initially
         self.cache_invalid = True
         self.newly_cached_prefixes = []
+        self.cache_path = "data/cache/ucalgary_peoplesoft_index_cache.json"
 
     def search_by_keyword(self, keyword: str) -> list[CourseList]:
         print(Panel("[yellow] Note: University of Calgary provides semester information through an alternate API. Building a course index with semester information may take a while.[/yellow]", title="Info"))
@@ -49,7 +51,8 @@ class UCalgaryProvider(BaseProvider):
         # * The formatDependents determines if the response should include what pre-requisites are associated with that course, I think orderBy can take any field that is available through the API, the effectiveDatesRange is just basically a semester filter I think, I set the limit to more than the total available courses to not have to deal with pagination. We are using effectiveDates range to only get courses that are for the current semster, its already on my todo list to figure out some way to make dates dynamically update. The other fields we just need for filtering on device.
         # ! You need to include the origin header or it will 401
         # ? Why is the effective dates set to such a weird range? They dont match up at all with the academic calendar, for now until I figure this out I'm just going to roll with it.
-        response = self._post(self.search_base_url + f"search/{keyword}?catalogId=R7TegZ8xGZCLE3avlAjI&skip=0&limit=6000&orderBy=code&formatDependents=false&effectiveDatesRange=2026-06-21,2026-06-30&ignoreEffectiveDating=false&columns=code,longName,customFields.rawCourseId,courseNumber,status,career,description", headers={"origin": "https://calendar.ucalgary.ca"})
+        current_effective_dates = self._get_current_effective_dates()
+        response = self._post(self.base_url + f"search/{keyword}?catalogId=R7TegZ8xGZCLE3avlAjI&skip=0&limit=6000&orderBy=code&formatDependents=false&effectiveDatesRange={current_effective_dates}&ignoreEffectiveDating=false&columns=code,longName,customFields.rawCourseId,courseNumber,status,career,description", headers={"origin": "https://calendar.ucalgary.ca"})
         try:
             dictionary_response = orjson.loads(response.text)
         except orjson.JSONDecodeError as error:
@@ -91,52 +94,9 @@ class UCalgaryProvider(BaseProvider):
             base = re.sub(r'[AB]$', '', course_code)
             self.semester_index.setdefault(base, []).append(course[2])
 
-        # If the cache is invalid, we want to rebuild it from scratch, this branch also triggers when the cache header doesn't exist in the file yet
-        if self.cache_invalid:
-            # Check if the path exists, if not create it
-            data_folder = Path("data/cache")
-            if not data_folder.exists():
-                data_folder.mkdir(parents=True)
-            # Open as write to wipe the file
-            with open("data/cache/ucalgary_peoplesoft_index_cache.json", "w+", encoding="utf-8") as f:
-                # Setup an inital data structure to build upon
-                new_cache: dict = {'course_prefixes_level': []}
-                # For every prefix that we had to fetch
-                for prefix in self.newly_cached_prefixes:
-                    # If the prefix isn't already in the newly built cache, add it
-                    if prefix not in new_cache['course_prefixes_level']:
-                        new_cache['course_prefixes_level'].append(prefix)
-                # Add all the courses to the cache
-                for course in self.semester_index:
-                    if course not in new_cache:
-                        new_cache[course] = self.semester_index[course]
-                # Add a one day expiration date to the cache
-                new_cache['cache_expiration'] = datetime.datetime.today() + datetime.timedelta(days=1)
-                # Decode automatically turns datetime into iso format
-                f.write(orjson.dumps(new_cache).decode("utf-8"))
-        # If the cache is not invalid, we just want to append what wasn't already in there, keep the old cache expiration date though
-        elif not self.cache_invalid:
-            # If we go down this path there is a file called ucalgary_peoplesoft_index_cache.json so we dont need to worry about there potentially not being a directory
-            with open("data/cache/ucalgary_peoplesoft_index_cache.json", "r+", encoding="utf-8") as f:
-                content = f.read()
-                if content:
-                    cache = orjson.loads(content)
-                else:
-                    cache = {'course_prefixes_level': []}
-                # Update the cache with any newly cached prefixes
-                for prefix in self.newly_cached_prefixes:
-                    if prefix not in cache['course_prefixes_level']:
-                        cache['course_prefixes_level'].append(prefix)
-                # Add any new courses to the cache
-                for course in self.semester_index:
-                    if course not in cache:
-                        cache[course] = self.semester_index[course]
-                # Move back to beginning of file and truncate
-                f.seek(0)
-                f.truncate()
-                f.write(orjson.dumps(cache).decode("utf-8"))
+        # Cache the index we built
+        self._cache_layer()
 
-                
         # print(self.peoplesoft_course_list)
         return course_list
     
@@ -168,6 +128,9 @@ class UCalgaryProvider(BaseProvider):
         )
     
     def _get_peoplesoft_courses(self, course_info: list[CourseList]) -> list[str]:
+        """
+        ! Warning this is a hefty function.
+        """
         # Get the course list for each course prefix we have for both semester's from peoplesoft
         peoplesoft_parser = PeopleSoftCourseSearch("https://csprd.my.ucalgary.ca/psc/csprd/EMPLOYEE/SA/c/COMMUNITY_ACCESS.CLASS_SEARCH.GBL", "https://csprd.my.ucalgary.ca/psc/csprd/EMPLOYEE/SA/c/COMMUNITY_ACCESS.CLASS_SEARCH.GBL?public=yes/&languageCd=ENG")
         course_prefixes_level = []
@@ -183,12 +146,12 @@ class UCalgaryProvider(BaseProvider):
                 course_prefixes_level.append((course_code_splitter.group(1), course_code_splitter.group(2)[0]))
 
         # Check if the file exists
-        my_file = Path("data/cache/ucalgary_peoplesoft_index_cache.json")
+        my_file = Path(self.cache_path)
         file_exists = False
         if my_file.is_file():
             file_exists = True
             # Read in the cache
-            with open("data/cache/ucalgary_peoplesoft_index_cache.json", "r") as f:
+            with open(self.cache_path, "r") as f:
                 content = f.read()
                 if content:
                     cache = orjson.loads(content)
@@ -243,18 +206,18 @@ class UCalgaryProvider(BaseProvider):
         )
         progress.start()
         
-        # Each prefix needs to be searched for both semesters
+        # Each prefix needs to be searched for both semesters, we always only look at two semesters (Fall and Winter) for now
         total_operations = len(course_prefixes_level) * 2
         building_index = progress.add_task("[cyan]Building PeopleSoft index...", total=total_operations, start=True)
         
         # Semester mapping for display
-        semester_names = {"2257": "Fall 2025", "2261": "Winter 2026"}
+        semester_names = self._get_peoplesoft_semester_codes()
         
         for prefix in course_prefixes_level:
             # print("Working through prefix:", prefix)
             # 2257 = Fall 2025, 2261 = Winter 2026
             # Dynamic semester building next thing on my TODO list work on
-            for semester in ["2257", "2261"]:
+            for semester in list(semester_names.keys()):
                 # print("Working through semester:", semester)
                 semester_display = semester_names.get(semester, semester)
                 progress.update(building_index, description=f"[cyan]Building PeopleSoft index... ({prefix[0]}{prefix[1]}xx - {semester_display})")
@@ -269,3 +232,115 @@ class UCalgaryProvider(BaseProvider):
         progress.stop()
         self.newly_cached_prefixes = course_prefixes_level
         return all_courses
+
+    def _get_current_effective_dates(self) -> str:
+        response = self._get("https://calendar.ucalgary.ca/courses")
+        soup = BeautifulSoup(response.text, 'lxml')
+
+        # Find the script tag that contains the effectiveDatesRange
+        pattern = re.compile(r'effectiveDatesRange')
+        script_tag  = soup.find("script", text=pattern)
+
+        # Same as final return
+        if script_tag is None:
+            return "2026-06-21,2026-06-30"
+        
+        script_tag_text = script_tag.string if script_tag else ""
+
+        if script_tag_text:
+            # Regex to find this: effectiveDatesRange:{effectiveStartDate: "2026-06-21",effectiveEndDate: "2026-06-30"}
+            new_pattern = re.compile(r'effectiveDatesRange:\s{0,1000}\{\s{0,1000}effectiveStartDate:\s{0,1000}"([0-9]{4}-[0-9]{2}-[0-9]{2})",\s{0,1000}effectiveEndDate:\s{0,1000}"([0-9]{4}-[0-9]{2}-[0-9]{2})"\s{0,1000}\}')
+            # Search for the pattern in the script tag text
+            match = new_pattern.search(script_tag_text)
+
+            if match:
+                start_date = match.group(1)
+                end_date = match.group(2)
+                # Specific format for the url
+                url_string = f"{start_date},{end_date}"
+                return url_string
+
+        # If it can't be found, return to hardcoded value
+        return "2026-06-21,2026-06-30"
+    
+    def _get_peoplesoft_semester_codes(self) -> dict[str, str]:
+        # Get all of our initial cookies and stuff setup
+        response = self._get("https://csprd.my.ucalgary.ca/psp/csprd/EMPLOYEE/SA/c/COMMUNITY_ACCESS.CLASS_SEARCH.GBL?public=yes/&languageCd=ENG")
+
+        # Now actually get the html for the webpage
+        response = self._get("https://csprd.my.ucalgary.ca/psc/csprd/EMPLOYEE/SA/c/COMMUNITY_ACCESS.CLASS_SEARCH.GBL?public=yes/&languageCd=ENG")
+        soup = BeautifulSoup(response.text, 'lxml')
+
+        select_tag = soup.find('select', {"id": "CLASS_SRCH_WRK2_STRM$35$"})
+        if select_tag is None:
+            return {"2257": "Fall 2025", "2261": "Winter 2026"}
+        
+        options = select_tag.find_all('option')
+        if not options:
+            return {"2257": "Fall 2025", "2261": "Winter 2026"}
+        
+        options.reverse()
+        semesters = {}
+
+        fall_flag = False
+        winter_flag = False
+        for option in options:
+            if "Fall" in option.text and not fall_flag:
+                semesters[option['value']] = "Fall " + option.text.strip().split()[-1]
+                fall_flag = True
+            elif "Winter" in option.text and not winter_flag:
+                semesters[option['value']] = "Winter " + option.text.strip().split()[-1]
+                winter_flag = True
+            if fall_flag and winter_flag:
+                break
+
+        # Ensure Fall comes before Winter in the dict, regardles of how they are ordered on the webpage, just makes the output cleaner. We could just sort by digit number but meh, this works.
+        semesters = dict(sorted(semesters.items(), key=lambda item: ("Fall" not in item[1], item[0])))
+        return semesters
+    
+    def _cache_layer(self) -> None:
+        # If the cache is invalid, we want to rebuild it from scratch, this branch also triggers when the cache header doesn't exist in the file yet
+        if self.cache_invalid:
+            # Check if the path exists, if not create it
+            data_folder = Path("data/cache")
+            if not data_folder.exists():
+                data_folder.mkdir(parents=True)
+            # Open as write to wipe the file
+            with open(self.cache_path, "w+", encoding="utf-8") as f:
+                # Setup an inital data structure to build upon
+                new_cache: dict = {'course_prefixes_level': []}
+                # For every prefix that we had to fetch
+                for prefix in self.newly_cached_prefixes:
+                    # If the prefix isn't already in the newly built cache, add it
+                    if prefix not in new_cache['course_prefixes_level']:
+                        new_cache['course_prefixes_level'].append(prefix)
+                # Add all the courses to the cache
+                for course in self.semester_index:
+                    if course not in new_cache:
+                        new_cache[course] = self.semester_index[course]
+                # Add a one day expiration date to the cache
+                new_cache['cache_expiration'] = datetime.datetime.today() + datetime.timedelta(days=1)
+                # Decode automatically turns datetime into iso format
+                f.write(orjson.dumps(new_cache).decode("utf-8"))
+        # If the cache is not invalid, we just want to append what wasn't already in there, keep the old cache expiration date though
+        elif not self.cache_invalid:
+            # If we go down this path there is a file called ucalgary_peoplesoft_index_cache.json so we dont need to worry about there potentially not being a directory
+            with open(self.cache_path, "r+", encoding="utf-8") as f:
+                content = f.read()
+                if content:
+                    cache = orjson.loads(content)
+                else:
+                    cache = {'course_prefixes_level': []}
+                # Update the cache with any newly cached prefixes
+                for prefix in self.newly_cached_prefixes:
+                    if prefix not in cache['course_prefixes_level']:
+                        cache['course_prefixes_level'].append(prefix)
+                # Add any new courses to the cache
+                for course in self.semester_index:
+                    if course not in cache:
+                        cache[course] = self.semester_index[course]
+                # Move back to beginning of file and truncate
+                f.seek(0)
+                f.truncate()
+                f.write(orjson.dumps(cache).decode("utf-8"))
+        pass

@@ -36,6 +36,7 @@ class UTokyoProvider(BaseProvider):
     def search_by_keyword(self, keyword: str) -> list[CourseList]:
         course_list : list[CourseList] = []
         page = 1
+        # * Same as University of Glasgow here, the page automatically updates year so we don't need to worry
         # What does type=jd mean?
         response = self._get(self.base_url + f"result?type=jd&q={keyword}&interface_language=en")
         try:
