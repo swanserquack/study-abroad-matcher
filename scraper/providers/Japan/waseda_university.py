@@ -31,14 +31,14 @@ class WasedaProvider(BaseProvider):
 
     def search_by_keyword(self, keyword: str) -> list[CourseList]:
         course_list : list[CourseList] = []
-        # For the first page this is just an empty string
-        page = ''
         # There are a ton of parameters, but we only need to include the ones with values (it seems), I'm not going to bother documenting the unused ones apart from the ones I already have
         # * The year is controlled by a parameter called 'nendo', since we don't include it, it defaults to the current academic year so we don't need to worry about getting any year information
+
+        # The parameters are sent as multipart form data, so we have to send them as a dictionary of tuples where the first value is None and the second value is the actual value, otherwise the server doesn't recognize them for some reason
         request_body = {
             # Number of results per page
             'p_number': (None, '100'),
-            'p_page': (None, str(page)), # Current page number
+            'p_page': (None, ''), # Current page number, for the first page this is just an empty string
             'pfrontPage': (None, 'now'), # Currently unknown
             'keyword': (None, keyword), # Search keyword
             'kamoku': (None, ''), # Course title, blank when empty
@@ -62,7 +62,8 @@ class WasedaProvider(BaseProvider):
             main_course_list_table = soup.find('table', class_='ct-vh') if soup.find('table', class_='ct-vh') else None
             if main_course_list_table is None:
                 raise ScraperError("Failed to find main course list table in the response HTML.")
-
+            
+            # Find each row which corresponds to a course
             for row in main_course_list_table.find_all('tr')[1:]: # Skip header row
                 cells = row.find_all('td')
 
@@ -82,13 +83,14 @@ class WasedaProvider(BaseProvider):
                     url=course_url,
                 ))
 
-            # The actual raw html is Next> but I'm assuming the xml parser just parses it out
+            # The actual raw html is Next> but I'm assuming the xml parser just parses out the > as its an unclosed/unopened tag
             next_arrow = soup.find('a', text='Next') if soup.find('a', text='Next') else None
 
             if next_arrow is None:
                 break
 
             page += 1
+            # Update the page that we want to request
             request_body['p_page'] = (None, str(page))
             response = self._post(self.base_url + "/index.php", files=request_body)
             soup = BeautifulSoup(response.text, 'xml')
@@ -108,6 +110,7 @@ class WasedaProvider(BaseProvider):
     
     def fetch_course_details(self, course_info: CourseList) -> CourseData:
         # We cut out the function call, split the two parameters by the comma, take the second parameter (the course id), strip whitespace and the surrounding quotes
+        # post_submit('JAA104DtlSubCon', '2603013003012026260301300326') as an example, we slice out the function, split by the comma, strip the whitespace and get rid of the quotes to give us 2603013003012026260301300326 which is the course id that we need to fetch the course details
         response = self._get(self.base_url + "JAA104.php" + f"?pKey={course_info.url[12:-1].split(",")[1].strip().replace("'", "")}&pLng=en")
         parsed_data = self.parse_courses(response.text, course_info)
         return parsed_data
@@ -137,7 +140,7 @@ class WasedaProvider(BaseProvider):
             aims = td.getText(strip=True)
 
         description = "N/A"
-        # * This is a case of broken xhtml, so we be careful to get it without grabbing all the text below this tag. There are two td's with wysiwyg but we grab the first
+        # * This is a case of broken xhtml, so we be careful to get it without grabbing all the text below this tag. There are two td's with wysiwyg but we grab the first one which is present within the second table container (they are both within the second table)
         first_desc_td = course_information_tables[1].find('td', class_='wysiwyg') if course_information_tables else None
         if first_desc_td:
             description = first_desc_td.get_text(strip=True)

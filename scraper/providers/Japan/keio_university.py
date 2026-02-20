@@ -92,11 +92,13 @@ class KeioProvider(BaseProvider):
         "SELECTED_TT_DWCD": "1" # The day selected, 1-6 Mon-Sat, 9 for Others
         }
         
+        # Go through each day of the week
         for i in range(1,7):
             keyword_search_payload["SELECTED_TT_DWCD"] = str(i)
             # We want to also search the 'Others' category
             if i == 7:
                 keyword_search_payload["SELECTED_TT_DWCD"] = str(9)
+            
             _response = self._post(self.base_url + "result", data=keyword_search_payload, headers=self.headers)
 
             try:
@@ -104,7 +106,9 @@ class KeioProvider(BaseProvider):
             except orjson.JSONDecodeError as error:
                 raise ParseError(f"Failed to parse JSON response when searching for keyword '{keyword}'.") from error
 
+            # For each period of the day 
             for course_data_entry in dictionary_response.get('searchResultDs', []):
+                # For each course entry in that period
                 for course_entry in course_data_entry.get('sbjtDs', []):
                     course_list.append(CourseList(
                         # This is a better alterantive than 'SUBTITLE' as 'SUBTITLE' sometimes doesn't exist and most of the time contains Japanese
@@ -125,6 +129,7 @@ class KeioProvider(BaseProvider):
         if not pattern.match(identifier.strip()):
             raise ValidationError(f"The K-Number '{identifier}' is not valid. Enter a valid K-Number in the format 'XXX-XX-XXXXX-XXX-XX'.")
 
+        # Get specific fields from the knumber to use for the search
         parsed_knumber = self._parse_knumber(identifier)
 
         identifier_search_payload = {
@@ -157,8 +162,10 @@ class KeioProvider(BaseProvider):
             except orjson.JSONDecodeError as error:
                 raise ParseError(f"Failed to parse JSON response when searching for K-Number '{identifier}'.") from error
             
+            # For each period of the day
             for course_data_entry in dictionary_response.get('searchResultDs', []):
                 # * The API returns an empty list for sbjtDs when no results are found, but its still better to be safe
+                # For each course entry in that period
                 for course_entry in course_data_entry.get('sbjtDs', []):
                     course_list.append(CourseList(
                         # This is a better alterantive than 'SUBTITLE' as 'SUBTITLE' sometimes doesn't exist and most of the time contains Japanese
@@ -194,7 +201,7 @@ class KeioProvider(BaseProvider):
         semester_td = soup.select_one("th:-soup-contains('Academic Year/Semester') + td")
         semester = semester_td.get_text(strip=True) if semester_td else "N/A"
 
-        # * For some courses (FPE-CO-03102-212-60), there are two of these, a 'Course Summary' and a 'Course Description/Objectives/Teaching Method/Intended Learning Outcome', the old code grabbed the wrong one. Additionally this code and the code at the top of the file both have different variations of the heading, so we need to check for both
+        # * For some courses (FPE-CO-03102-212-60), there are two of these, a 'Course Summary' and a 'Course Description/Objectives/Teaching Method/Intended Learning Outcome', the old code grabbed the wrong one. Additionally this knumber and the knumber at the top of the file both have different variations of the heading, so we need to check for both. We prioritise getting the 'Course Contents/Objectives/Teaching Method/Intended Learning Outcome' one.
         aims_div = soup.select_one("h3:-soup-contains('Course Contents/Objectives/Teaching Method/Intended Learning Outcome') + div.contents")
         if not aims_div:
             aims_div = soup.select_one("h3:-soup-contains('Course Description/Objectives/Teaching Method/Intended Learning Outcome') + div.contents")
@@ -211,7 +218,7 @@ class KeioProvider(BaseProvider):
             aims=aims,
         )
     
-    # * This is imperfect, all we do is pull apart the knumber, we don't validate a course is actually associated with it, so we use error handling when requesting the course data later on
+    # * This is imperfect, all we do is pull apart the knumber, we don't validate a course is actually associated with it (How would we do this apart from searching for it? For later consideration.), so we use error handling when requesting the course data later on
     def _parse_knumber(self, knumber: str) -> dict[str, str]:
         # Get the course administrator codes for the faculty/graduate school 
         response = self._get(self.base_url + "search")
@@ -249,7 +256,7 @@ class KeioProvider(BaseProvider):
             if major_list[i]['name'][0:2] == knumber[4:6]:
                 department = major_list[i]['value']
 
-        # Slice out the relevant parts of the knumber, already verified against the regex
+        # Slice out the relevant parts of the knumber, already verified against the regex to at least be in the correct format
         course_level = knumber[7]
         major_classification = knumber[8]
         minor_classification = knumber[9:11]

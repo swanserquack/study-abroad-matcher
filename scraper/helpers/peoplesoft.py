@@ -54,7 +54,7 @@ class PeopleSoftCourseSearch:
         self.state_num = 0
 
 
-    def new_search(self):
+    def new_search(self) -> requests.Response:
         """
         Reset the search state for a new search.
         Call this before performing another search with the same session.
@@ -191,7 +191,7 @@ class PeopleSoftCourseSearch:
         return response.text
     
 
-    def parse_results_page(self, html_content: str) -> list[str]:
+    def parse_results_page(self, html_content: str) -> list[tuple[str, str, str]]:
         """
         Parse the results page and return a list of the courses found.
         This is extremely UCalgary specific as seen with the specific regex and HTML structure parsing.
@@ -201,7 +201,7 @@ class PeopleSoftCourseSearch:
             soup = BeautifulSoup(html_content, 'xml')
         except ParserRejectedMarkup:
                 soup = BeautifulSoup(html_content, 'lxml')
-        courses = []
+        courses : list[tuple[str,str,str]] = []
         semester = None
 
         # Grab all FIELD elements
@@ -222,6 +222,9 @@ class PeopleSoftCourseSearch:
                         # Extract semester from the text, example: "University of Calgary | Winter 2025"
                         if '|' in full_text:
                             semester = full_text.split('|')[1].strip()
+                
+                # Ensure that the semester is set to something even if we fail to extract it, makes it easier to debug and ensure that semester is a str
+                semester = semester if semester else "Unknown Semester"
 
 
                 # Find all course header/title boxes 
@@ -239,10 +242,16 @@ class PeopleSoftCourseSearch:
                     match = re.search(pattern, text)
                     
                     if match:
-                        # Grab from the regex groups
-                        course_code = match.group(1).strip()
-                        course_title = match.group(2).strip()
+                        # Grab from the regex groups, course code only used in building the semester index, not elsewhere
+                        course_code = str(match.group(1).strip())
+                        course_title = str(match.group(2).strip())
                         # print(course_code, course_title, semester)
+
+                        course_code = course_code if course_code else "NULL"
+                        course_title = course_title if course_title else "Unknown Title"
+
                         courses.append((course_code, course_title, semester))
                         
+                
+
         return courses

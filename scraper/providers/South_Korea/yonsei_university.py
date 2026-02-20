@@ -14,7 +14,6 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 
-
 from scraper.providers.base_provider import BaseProvider
 from scraper.models import CourseList, CourseData
 from scraper.errors import ValidationError, CourseNotFoundError, ParseError, ScraperError
@@ -26,7 +25,7 @@ class YonseiProvider(BaseProvider):
     university_name = "yonsei_university"
     korean_course_names : dict[str, str] = {}
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.base_url = "https://underwood1.yonsei.ac.kr/"
 
@@ -38,7 +37,7 @@ class YonseiProvider(BaseProvider):
     def search_by_keyword(self, keyword: str) -> list[CourseList]:
         course_list: list[CourseList] = []
 
-        # ! Keyword search does send this data, but it does not seem to effect the results, so we will use as broad of a search as possible but it shouldn't matter
+        # ! Keyword search does send this data, but it does not seem to affect the results, so we will use as broad of a search as possible but it shouldn't matter
         keyword_search_payload = {
             "_menuId": "MTA5MzM2MTI3MjkzMTI2NzYwMDA=", # Currently unknown, Constant? Doesn't seem to have any relation to cookies/session. Base64 decode just gives numbers.
             "_menuNm": "", # Currently unknown 
@@ -161,6 +160,9 @@ class YonseiProvider(BaseProvider):
             "": ""
         }
         response = self._post(self.base_url + "sch/sles/SlessyCtr/findSlesYySmtScheList.do", data=request_headers)
-        json_response = orjson.loads(response.text)
-        year = json_response.get("dmSyySmt", {}).get("syy", "2026")
+        try:
+            json_response = orjson.loads(response.text)
+        except orjson.JSONDecodeError as error:
+            raise ParseError(f"Failed to parse JSON response when getting current year.") from error
+        year : str = json_response.get("dmSyySmt", {}).get("syy", "2026")
         return year

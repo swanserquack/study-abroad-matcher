@@ -15,8 +15,11 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 from scraper.providers.base_provider import BaseProvider
 from scraper.models import CourseData
-import os, orjson, datetime
 from rich.progress import Progress, MofNCompleteColumn
+import os
+import orjson
+import datetime
+
 
 class ScraperEngine:
     """
@@ -45,6 +48,7 @@ class ScraperEngine:
         if callable(setup_method):
             setup_method()
         
+        # What search method we want to use, either by keyword or by course identifier (e.g course code)
         if search_method == "keyword":
             course_list = self.provider.search_by_keyword(value)
         elif search_method == "course_identifier":
@@ -55,6 +59,7 @@ class ScraperEngine:
 
         print(f"Found {course_list_length} courses. Starting scrape...")
 
+        # Get the course details for each course in the course list, and update the progress bar as we go
         getting_details = self.progress.add_task("[green]Getting course details...", total=course_list_length, start=True)
         for course in course_list:
             course_data = self.provider.fetch_course_details(course)
@@ -63,6 +68,7 @@ class ScraperEngine:
 
         self.progress.stop()
 
+        # Output to a json file
         output_dir = os.path.join(os.path.dirname(__file__), "..", "data")
         os.makedirs(output_dir, exist_ok=True)
 

@@ -46,6 +46,7 @@ class UTokyoProvider(BaseProvider):
         while True:
             # Find all the course containers
             maincontent_div = soup.find_all('div', class_='catalog-search-result-card')
+            # For each course container
             for course in maincontent_div:
                 course_name_link = course.select_one('a')
 
@@ -91,7 +92,7 @@ class UTokyoProvider(BaseProvider):
         # * The identifier does not need to be capitalised as it has little effect on the search results
         # Just reuse the keyword search as the search function works for both name and code
         course_list = self.search_by_keyword(identifier)
-        # Filter the results to only include those that match the identifier, we need the upper in case the user put in a lowercase code
+        # Filter the results to only include those that match the identifier, we need the upper in case the user put in a lowercase code (But the regex is in uppercase??)
         course_list = [course for course in course_list if course.course_code.upper() == identifier.strip().upper()]
         return course_list
     

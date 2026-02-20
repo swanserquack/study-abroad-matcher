@@ -28,7 +28,7 @@ import orjson
 import re
 
 # * The API for Calgary (coursedog) has a ton of useful information on tap - such as dependencies, if its got a final exam etc - when I build up a proper UI later I will need to extend out a specific CourseData for Calgary to take advantage of all this extra data
-# * GOLD MINE: GET request to https://app.coursedog.com/api/v1/ucalgary_peoplesoft/general/courseTemplate/questions provides a ton of information about each field, such as a description and a ton of details about it
+# * GET request to https://app.coursedog.com/api/v1/ucalgary_peoplesoft/general/courseTemplate/questions provides a ton of information about each field, such as a description and a ton of details about it
 # * GET request to https://app.coursedog.com/api/v1/ca/ucalgary_peoplesoft/search-configurations/3HheDcKChSNwS1Wr1Khr provides information about what filters are available and kind of what fields to use in request for filters
 class UCalgaryProvider(BaseProvider):
     university_name = "university_of_calgary"
@@ -36,19 +36,19 @@ class UCalgaryProvider(BaseProvider):
     def __init__(self) -> None:
         super().__init__()
         self.base_url = "https://app.coursedog.com/api/v1/cm/ucalgary_peoplesoft/courses/"
-        self.description_dict = {}
+        self.description_dict : dict[str, str] = {}
         # Assume the cache to be invalid initially
         self.cache_invalid = True
-        self.newly_cached_prefixes = []
+        self.newly_cached_prefixes : list[tuple[str, str]] = []
         self.cache_path = "data/cache/ucalgary_peoplesoft_index_cache.json"
 
     def search_by_keyword(self, keyword: str) -> list[CourseList]:
         print(Panel("[yellow] Note: University of Calgary provides semester information through an alternate API. Building a course index with semester information may take a while.[/yellow]", title="Info"))
         course_list: list[CourseList] = []
         # ! There is a static payload which is sent with the request, however it like 200 lines of just sending a filter, I'd prefer not to send it (seems to work fine without it) and just do filtering on device
-        # * The api is kind of documented here: https://coursedogcurriculum.docs.apiary.io/#reference/courses/search-courses
+        # * The overall coursedog api is kind of documented here: https://coursedogcurriculum.docs.apiary.io/#reference/courses/search-courses
         
-        # * The formatDependents determines if the response should include what pre-requisites are associated with that course, I think orderBy can take any field that is available through the API, the effectiveDatesRange is just basically a semester filter I think, I set the limit to more than the total available courses to not have to deal with pagination. We are using effectiveDates range to only get courses that are for the current semster, its already on my todo list to figure out some way to make dates dynamically update. The other fields we just need for filtering on device.
+        # * The formatDependents determines if the response should include what pre-requisites are associated with that course, I think orderBy can take any field that is available through the API, the effectiveDatesRange is just basically a semester filter I think, I set the limit to more than the total available courses to not have to deal with pagination. We are using effectiveDates range to only get courses that are for the current semster. The other fields we just need for filtering on device. Columns is just the data we want returned back, if nothing is specified it returns everything it has.
         # ! You need to include the origin header or it will 401
         # ? Why is the effective dates set to such a weird range? They dont match up at all with the academic calendar, for now until I figure this out I'm just going to roll with it.
         current_effective_dates = self._get_current_effective_dates()
@@ -59,7 +59,7 @@ class UCalgaryProvider(BaseProvider):
             raise ParseError(f"Failed to parse JSON response when searching for keyword '{keyword}'.") from error
         
         # Dont really need .get here as even if there are no results, it returns an empty list
-        # ? Even if we used the filtering provided by the provider by sending that large header, it would still need to be manually updated since there is no obvious way to get the current filters from the web page so we just say f it we ball and do it on device
+        # ? Even if we used the filtering provided by the provider by sending that large header, it would still need to be manually updated since the format in the script tags on the webpage is unhelpful - it gives the values of what to filter but not what conditions (i.e just gives career but not that it should be empty). so we just say f it we ball and do it on device
         for course_entry in dictionary_response.get("data", []):
             # Follow filtering rules which are normally sent to the server, if there is no value we should fail
             if course_entry.get("status", "") != "Active":
@@ -130,14 +130,18 @@ class UCalgaryProvider(BaseProvider):
     def _get_peoplesoft_courses(self, course_info: list[CourseList]) -> list[str]:
         """
         ! Warning this is a hefty function.
+
+        This function gets the course list for each course prefix we have for both semester's from peoplesoft.
         """
-        # Get the course list for each course prefix we have for both semester's from peoplesoft
+        
+        # Create the parser for peoplesoft
         peoplesoft_parser = PeopleSoftCourseSearch("https://csprd.my.ucalgary.ca/psc/csprd/EMPLOYEE/SA/c/COMMUNITY_ACCESS.CLASS_SEARCH.GBL", "https://csprd.my.ucalgary.ca/psc/csprd/EMPLOYEE/SA/c/COMMUNITY_ACCESS.CLASS_SEARCH.GBL?public=yes/&languageCd=ENG")
-        course_prefixes_level = []
+        course_prefixes_level : list[tuple[str, str]] = []
         all_courses = []
 
         # Figure out what search queries to run/course prefixes + levels
         for course in course_info:
+            # Seperate the course code into its prefix and number components.
             course_code_splitter = re.search(r"([A-Z]{3,4})([1-7][0-9]{2})$", course.course_code)
             if course_code_splitter is None:
                 raise ScraperError(f"Failed to parse course code '{course.course_code}' for course '{course.name}'.")
@@ -145,7 +149,7 @@ class UCalgaryProvider(BaseProvider):
             if course_code_splitter.group(1) not in course_prefixes_level and course_code_splitter.group(2)[0] not in [level[1] for level in course_prefixes_level if level[0] == course_code_splitter.group(1)]:
                 course_prefixes_level.append((course_code_splitter.group(1), course_code_splitter.group(2)[0]))
 
-        # Check if the file exists
+        # Check if the cache file exists
         my_file = Path(self.cache_path)
         file_exists = False
         if my_file.is_file():
@@ -163,20 +167,21 @@ class UCalgaryProvider(BaseProvider):
         # If there is a cache expiration date, we default to assuming that the cache is invalid
         if 'cache_expiration' in cache:
             expiration_date = datetime.datetime.fromisoformat(cache['cache_expiration'])
+            # If the current date is before the expiration date, consider the cache valid
             if datetime.datetime.today() < expiration_date:
                 self.cache_invalid = False
             else:
-                # If the cache is expired, we want to wipe it
+                # If the cache is expired, we want to wipe it and build a new one
                 cache = {}
         
-        # How many prefixes do we need to fetch?
+        # How many prefixes do we actually need to fetch from the server?
         prefixes_to_fetch = []
         for prefix in course_prefixes_level:
             # If the file exists, the cache is valid and the prefix is already in the cache, we do not need to fetch it again so we just skip it
             if file_exists and not self.cache_invalid and any(prefix[0] == cached_key[0] and prefix[1] == cached_key[1] for cached_key in cache['course_prefixes_level']):
                 continue
             else:
-                # Need to fetch this prefix
+                # Need to fetch this prefix from the server
                 prefixes_to_fetch.append(prefix)
         
         # Set the prefixes we need to fetch
@@ -186,7 +191,7 @@ class UCalgaryProvider(BaseProvider):
         if not course_prefixes_level:
             # For every item in the cache
             for cached_key, semesters in cache.items():
-                # We already know self.newly_cached_prefixes is empty so we will have nothing to append so we dont need to store this, also this errors out when removing duplicates as it is a list 
+                # If we get here we already know the cache is valid and it contains everything that we need, we don't need to update the list of cached prefixes at all since we aren't fetching anything new, so we just skip it, also this errors out when removing duplicates as it is a list (??)
                 if cached_key in ('course_prefixes_level'):
                     continue
                 # We want to cache the full string for cache_expiration or else it will split the date
@@ -215,9 +220,7 @@ class UCalgaryProvider(BaseProvider):
         
         for prefix in course_prefixes_level:
             # print("Working through prefix:", prefix)
-            # 2257 = Fall 2025, 2261 = Winter 2026
-            # Dynamic semester building next thing on my TODO list work on
-            for semester in list(semester_names.keys()):
+            for semester in semester_names.keys():
                 # print("Working through semester:", semester)
                 semester_display = semester_names.get(semester, semester)
                 progress.update(building_index, description=f"[cyan]Building PeopleSoft index... ({prefix[0]}{prefix[1]}xx - {semester_display})")
@@ -245,11 +248,11 @@ class UCalgaryProvider(BaseProvider):
         if script_tag is None:
             return "2026-06-21,2026-06-30"
         
-        script_tag_text = script_tag.string if script_tag else ""
+        script_tag_text = script_tag.string or ""
 
         if script_tag_text:
             # Regex to find this: effectiveDatesRange:{effectiveStartDate: "2026-06-21",effectiveEndDate: "2026-06-30"}
-            new_pattern = re.compile(r'effectiveDatesRange:\s{0,1000}\{\s{0,1000}effectiveStartDate:\s{0,1000}"([0-9]{4}-[0-9]{2}-[0-9]{2})",\s{0,1000}effectiveEndDate:\s{0,1000}"([0-9]{4}-[0-9]{2}-[0-9]{2})"\s{0,1000}\}')
+            new_pattern = re.compile(r'effectiveDatesRange:\s{0,100}\{\s{0,100}effectiveStartDate:\s{0,100}"([0-9]{4}-[0-9]{2}-[0-9]{2})",\s{0,100}effectiveEndDate:\s{0,100}"([0-9]{4}-[0-9]{2}-[0-9]{2})"\s{0,100}\}')
             # Search for the pattern in the script tag text
             match = new_pattern.search(script_tag_text)
 
@@ -265,32 +268,38 @@ class UCalgaryProvider(BaseProvider):
     
     def _get_peoplesoft_semester_codes(self) -> dict[str, str]:
         # Get all of our initial cookies and stuff setup
-        response = self._get("https://csprd.my.ucalgary.ca/psp/csprd/EMPLOYEE/SA/c/COMMUNITY_ACCESS.CLASS_SEARCH.GBL?public=yes/&languageCd=ENG")
+        self._get("https://csprd.my.ucalgary.ca/psp/csprd/EMPLOYEE/SA/c/COMMUNITY_ACCESS.CLASS_SEARCH.GBL?public=yes/&languageCd=ENG")
 
         # Now actually get the html for the webpage
         response = self._get("https://csprd.my.ucalgary.ca/psc/csprd/EMPLOYEE/SA/c/COMMUNITY_ACCESS.CLASS_SEARCH.GBL?public=yes/&languageCd=ENG")
         soup = BeautifulSoup(response.text, 'lxml')
 
+        # Find the select tag which is a drop-down for selecting which semester
         select_tag = soup.find('select', {"id": "CLASS_SRCH_WRK2_STRM$35$"})
         if select_tag is None:
             return {"2257": "Fall 2025", "2261": "Winter 2026"}
         
+        # Find all the options within the select tag, this is from the oldest on the top to the newest on the bottom
         options = select_tag.find_all('option')
         if not options:
             return {"2257": "Fall 2025", "2261": "Winter 2026"}
         
+        # Reverse it to place the newest on top and the oldest on the bottom
         options.reverse()
         semesters = {}
 
         fall_flag = False
         winter_flag = False
         for option in options:
+            # If its the first Fall semester we see, we add the year to the end of the string "Fall" and put it in the dictionary with the specific ucalgary code as the key
             if "Fall" in option.text and not fall_flag:
                 semesters[option['value']] = "Fall " + option.text.strip().split()[-1]
                 fall_flag = True
+            # Same as above but for Winter
             elif "Winter" in option.text and not winter_flag:
                 semesters[option['value']] = "Winter " + option.text.strip().split()[-1]
                 winter_flag = True
+            # If we have encountered both then break
             if fall_flag and winter_flag:
                 break
 
@@ -316,6 +325,7 @@ class UCalgaryProvider(BaseProvider):
                         new_cache['course_prefixes_level'].append(prefix)
                 # Add all the courses to the cache
                 for course in self.semester_index:
+                    # If the course isn't already in the newly built cache, add it
                     if course not in new_cache:
                         new_cache[course] = self.semester_index[course]
                 # Add a one day expiration date to the cache
@@ -324,7 +334,7 @@ class UCalgaryProvider(BaseProvider):
                 f.write(orjson.dumps(new_cache).decode("utf-8"))
         # If the cache is not invalid, we just want to append what wasn't already in there, keep the old cache expiration date though
         elif not self.cache_invalid:
-            # If we go down this path there is a file called ucalgary_peoplesoft_index_cache.json so we dont need to worry about there potentially not being a directory
+            # If we go down this path there is a file called ucalgary_peoplesoft_index_cache.json so we dont need to worry about the file not existing
             with open(self.cache_path, "r+", encoding="utf-8") as f:
                 content = f.read()
                 if content:
@@ -343,4 +353,3 @@ class UCalgaryProvider(BaseProvider):
                 f.seek(0)
                 f.truncate()
                 f.write(orjson.dumps(cache).decode("utf-8"))
-        pass

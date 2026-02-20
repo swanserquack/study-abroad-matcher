@@ -39,6 +39,7 @@ class UGlasgowProvider(BaseProvider):
         while True:
             maincontent_div = soup.find_all('div', class_='catSearchResult')
 
+            # For each search result
             for course in maincontent_div:
                 course_name_link = course.select_one('a')
                 course_name = course_name_link.getText(strip=True) if course_name_link else "N/A"
@@ -75,7 +76,7 @@ class UGlasgowProvider(BaseProvider):
         # There isn't really a specific regex pattern we can use so we use a more general one, LAW is a course identifier so letters need to be at least 3 long
         pattern = re.compile(r"^[A-Za-z]{3,7}[0-9]{4}$")
         if not pattern.match(identifier.strip()):
-            raise ValidationError(f"The course code '{identifier}' is not valid. Enter a valid Course Code in the format 'CXXXX9999'.")
+            raise ValidationError(f"The course code '{identifier}' is not valid. Enter a valid Course Code in the format 'XXXX9999'.")
         # Just reuse the keyword search as the search function works for both name and code
         course_list = self.search_by_keyword(identifier)
         return course_list
